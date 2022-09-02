@@ -11,7 +11,8 @@ export function activate(context: vscode.ExtensionContext) {
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText();
-				//var toReplace = /\t/gi;
+				var toReplace = /\t/gi;
+				word = word.replace(toReplace, ' ');
 				let allLines: string[] = word.split('\n');
 				for(let i = 0; i < allLines.length; ++i) {
 					let currentLine: string = allLines[i];
@@ -22,7 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
 							if(currentLine.includes('}') && !currentLine.includes("else")) continue;
 							let spacesBefore = countSpacesBeforeCode(allLines[i]);
 							let tmpStr: string = "";
-							if(spacesBefore != undefined) {
+							if(spacesBefore !== undefined) {
 								for(let i = 0; i < spacesBefore; ++i) {
 									tmpStr += " ";
 								}
@@ -33,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
 							if(currentLine.indexOf('}') < currentLine.indexOf("else")) {
 								let spacesBefore = countSpacesBeforeCode(allLines[i]);
 								let tmpStr: string = "";
-								if(spacesBefore != undefined) {
+								if(spacesBefore !== undefined) {
 									for(let i = 0; i < spacesBefore; ++i) {
 										tmpStr += " ";
 									}
@@ -91,7 +92,7 @@ function countSpacesBeforeCode(strLine: string) {
 	let cnt = 0;
 	for(let i = 0; i < strLine.length; ++i) {
 		const character = strLine.charAt(i);
-		if(character == ' ') {
+		if(character === ' ') {
 			++cnt;
 		} else {
 			return cnt;
