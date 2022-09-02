@@ -1,5 +1,6 @@
 {
   "name": "checkstyle-converter",
+  "publisher": "25DanielG",
   "displayName": "Checkstyle Converter",
   "description": "Converts java code to conform with checkstyle standards",
   "version": "0.0.1",
