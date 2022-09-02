@@ -3,7 +3,7 @@
   "publisher": "25DanielG",
   "displayName": "Checkstyle Converter",
   "description": "Converts java code to conform with checkstyle standards",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.70.0"
   },
