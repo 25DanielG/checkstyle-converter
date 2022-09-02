@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText();
 				var toReplace = /\t/gi;
-				word = word.replace(toReplace, ' ');
+				word = word.replace(toReplace, '  ');
 				let allLines: string[] = word.split('\n');
 				for(let i = 0; i < allLines.length; ++i) {
 					let currentLine: string = allLines[i];
