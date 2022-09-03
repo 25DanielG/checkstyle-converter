@@ -14,8 +14,9 @@
     "onCommand:checkstyle-converter.convertCheckstyle",
     "onCommand:checkstyle-converter.convertCheckstyleWithSelction",
     "onCommand:checkstyle-converter.togglePlusPlus",
-    "onCommand:checkstyle-converter.toggleIndentPreference",
-    "onCommand:checkstyle-converter.fixIndentation"
+    "onCommand:checkstyle-converter.changeIndentPreference",
+    "onCommand:checkstyle-converter.fixIndentation",
+    "onCommand:checkstyle-converter.fixIndentationSelection"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -33,12 +34,16 @@
         "title": "Toggle Increment Style"
       },
       {
-        "command": "checkstyle-converter.toggleIndentPreference",
-        "title": "Toggle Indent Preference (Two Spaces and Four Spaces)"
+        "command": "checkstyle-converter.changeIndentPreference",
+        "title": "Change Indent Preference"
       },
       {
         "command": "checkstyle-converter.fixIndentation",
         "title": "Fix Indentation"
+      },
+      {
+        "command": "checkstyle-converter.fixIndentationSelection",
+        "title": "Fix Indentation Selection"
       }
     ]
   },
