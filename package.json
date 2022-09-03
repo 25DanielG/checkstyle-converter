@@ -3,7 +3,7 @@
   "publisher": "25DanielG",
   "displayName": "Checkstyle Converter",
   "description": "Converts java code to conform with checkstyle standards",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "engines": {
     "vscode": "^1.70.0"
   },
@@ -13,7 +13,9 @@
   "activationEvents": [
     "onCommand:checkstyle-converter.convertCheckstyle",
     "onCommand:checkstyle-converter.convertCheckstyleWithSelction",
-    "onCommand:checkstyle-converter.togglePlusPlus"
+    "onCommand:checkstyle-converter.togglePlusPlus",
+    "onCommand:checkstyle-converter.toggleIndentPreference",
+    "onCommand:checkstyle-converter.fixIndentation"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -29,6 +31,14 @@
       {
         "command": "checkstyle-converter.togglePlusPlus",
         "title": "Toggle Increment Style"
+      },
+      {
+        "command": "checkstyle-converter.toggleIndentPreference",
+        "title": "Toggle Indent Preference (Two Spaces and Four Spaces)"
+      },
+      {
+        "command": "checkstyle-converter.fixIndentation",
+        "title": "Fix Indentation"
       }
     ]
   },
