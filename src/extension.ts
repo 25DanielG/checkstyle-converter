@@ -1,5 +1,6 @@
 import { ConsoleReporter } from '@vscode/test-electron';
 import { systemDefaultPlatform } from '@vscode/test-electron/out/util';
+import { close } from 'fs';
 import { allowedNodeEnvironmentFlags } from 'process';
 import { start } from 'repl';
 import * as vscode from 'vscode';
@@ -76,7 +77,6 @@ export function activate(context: vscode.ExtensionContext) {
 				const firstLine = editor.document.lineAt(0);
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
-				console.log("Normal selection is: (" + firstLine.lineNumber + ", " + firstLine.range.start.character + ") to (" + lastLine.lineNumber + ", " + lastLine.range.end.character + ")");
 				let word = editor.document.getText();
 				let newWord:string = performIndentation(range, word, indentPreference);
 				editBuilder.replace(range, newWord);
@@ -210,19 +210,24 @@ function findWhereToClose(allLines: string[], currLine: number) {
 	let returnNum: number = -1;
 	for(let tmpCnt:number = currLine + 1; tmpCnt < allLines.length; ++tmpCnt) {
 		if(includeExcludingComment(allLines[tmpCnt], tmpCnt, "for(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "else(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "while(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "if(")) {
-			returnNum = findWhereToClose(allLines, tmpCnt + 1);
-		} else if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '{') || onlyOpenBrace(allLines[tmpCnt])) {
-			while(true) {
-				if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '}')) {
-					if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '{') || allLines[tmpCnt].indexOf('{') < allLines[tmpCnt].indexOf('}')) continue;
-					return tmpCnt;
+			if(!includeExcludingComment(allLines[tmpCnt], tmpCnt, "{") && !onlyOpenBrace(allLines[tmpCnt + 1])) {
+				returnNum = findWhereToClose(allLines, tmpCnt);
+			} else {
+				while(true) {
+					if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '}')) {
+						if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '{') && allLines[tmpCnt].indexOf('{') < allLines[tmpCnt].indexOf('}')) {
+							++tmpCnt;
+							continue;
+						}
+						return tmpCnt;
+					}
+					++tmpCnt;
 				}
 			}
 		} else {
 			return tmpCnt;
 		}
 	}
-	console.log("Return num: " + returnNum);
 	return returnNum;
 }
 function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean) {
@@ -267,9 +272,9 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean) {
 							tmpStr += " ";
 						}
 					}
-					allLines[i] = allLines[i] + '\n' + tmpStr + '{';
 					let closePlace: number = findWhereToClose(allLines, i);
-					allLines[closePlace] = allLines[closePlace] + '\n' + tmpStr + '}';
+					allLines[i] = allLines[i] + '\n' + tmpStr + '{';
+					allLines.splice(closePlace + 1, 0, tmpStr + '}');
 				}
 			}
 		}
@@ -295,9 +300,7 @@ function performIndentation(range: vscode.Range, word: string, indentPref: numbe
 		let currentLine: string = allLines[i];
 		let indentTracker = countSpacesBeforeCode(currentLine);
 		properIndent = indentPushNum * indentPref;
-		console.log("Range is: (" + range.start.line + ", " + range.end.line + ").");
 		if(i >= range.start.line && i <= range.end.line) {
-			console.log("Entered the indent if!");
 			if(indentTracker !== undefined) {
 				if(normalNextIndent) {
 					if(onlyCloseBrace(currentLine)) {
