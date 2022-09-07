@@ -1,39 +1,54 @@
 import { ConsoleReporter } from '@vscode/test-electron';
 import { systemDefaultPlatform } from '@vscode/test-electron/out/util';
-import { close } from 'fs';
+import { close, unwatchFile } from 'fs';
 import { allowedNodeEnvironmentFlags } from 'process';
 import { start } from 'repl';
+import { isReadable } from 'stream';
 import * as vscode from 'vscode';
 var startBlockComments: number[] = [];
 var endBlockComments: number[] = [];
+var classIndents: number[] = [];
+const editor = vscode.window.activeTextEditor;
+let preDoc = editor?.document.getText();
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Checkstlye converter is currently active!');
 	let changePP: boolean = false;
 	let indentPreference = 2;
-	const editor = vscode.window.activeTextEditor;
-	let preDoc = editor?.document.getText();
-	if(preDoc !== undefined) {
-		preprocessBlockComments(preDoc.split("\n"));
+	if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
+		editor.edit(editBuilder => {
+			const firstLine = editor.document.lineAt(0);
+			const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
+			const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
+			if(preDoc !== undefined) {
+				let preDoc = preprocess();
+				if(preDoc !== undefined) {
+					editBuilder.replace(range, preDoc);
+					console.log("Preprocessed editor.");
+				}
+			}
+		});
+	} else {
+		vscode.window.showInformationMessage("No active editor open or editor is not a .java or .jt file.");
 	}
 	let disposable = vscode.commands.registerCommand('checkstyle-converter.convertCheckstyle', () => {
 		const editor = vscode.window.activeTextEditor;
-		if (editor && editor.document.fileName.includes(".java")) {
+		if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 			editor.edit(editBuilder => {
 				const firstLine = editor.document.lineAt(0);
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText();
-				let newWord: string = performCheckstyle(range, word, changePP);
+				let newWord: string = performCheckstyle(range, word, changePP, indentPreference);
 				editBuilder.replace(range, newWord);
 			});
 		} else {
-			vscode.window.showInformationMessage("No active editor open or editor is not a .java file.");
+			vscode.window.showInformationMessage("No active editor open or editor is not a .java or .jt file.");
 		}
 	});
 	context.subscriptions.push(disposable);
 	let disposableTwo = vscode.commands.registerCommand('checkstyle-converter.convertCheckstyleWithSelction', () => {
 		const editor = vscode.window.activeTextEditor;
-		if (editor && editor.document.fileName.includes(".java")) {
+		if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 			editor.edit(editBuilder => {
 				const sel = editor.selection;
 				const firstLine = editor.document.lineAt(sel.start.line);
@@ -41,11 +56,11 @@ export function activate(context: vscode.ExtensionContext) {
 				console.log("Selection is: (" + firstLine.lineNumber + ", " + firstLine.range.start.character + ") to (" + lastLine.lineNumber + ", " + lastLine.range.end.character + ")");
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText(range);
-				let newWord: string = performCheckstyle(range, word, changePP);
+				let newWord: string = performCheckstyle(range, word, changePP, indentPreference);
 				editBuilder.replace(range, newWord);
 			});
 		} else {
-			vscode.window.showInformationMessage("No active editor open or editor is not a .java file.");
+			vscode.window.showInformationMessage("No active editor open or editor is not a .java pf .jt file.");
 		}
 	});
 	context.subscriptions.push(disposableTwo);
@@ -72,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(disposableFour);
 	let disposableFive = vscode.commands.registerCommand('checkstyle-converter.fixIndentation', () => {
 		const editor = vscode.window.activeTextEditor;
-		if(editor && editor.document.fileName.includes(".java")) {
+		if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 			editor.edit(editBuilder => {
 				const firstLine = editor.document.lineAt(0);
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
@@ -82,13 +97,13 @@ export function activate(context: vscode.ExtensionContext) {
 				editBuilder.replace(range, newWord);
 			});
 		} else {
-			vscode.window.showInformationMessage("No active editor open or editor is not a .java file.");
+			vscode.window.showInformationMessage("No active editor open or editor is not a .java of .jt file.");
 		}
 	});
 	context.subscriptions.push(disposableFive);
 	let disposableSix = vscode.commands.registerCommand('checkstyle-converter.fixIndentationSelection', () => {
 		const editor = vscode.window.activeTextEditor;
-		if(editor && editor.document.fileName.includes(".java")) {
+		if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 			editor.edit(editBuilder => {
 				const sel = editor.selection;
 				const firstLine = editor.document.lineAt(sel.start.line);
@@ -100,7 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 				editBuilder.replace(range, newWord);
 			});
 		} else {
-			vscode.window.showInformationMessage("No active editor open or editor is not a .java file.");
+			vscode.window.showInformationMessage("No active editor open or editor is not a .java or .jt file.");
 		}
 	});
 	context.subscriptions.push(disposableSix);
@@ -109,19 +124,51 @@ export function activate(context: vscode.ExtensionContext) {
 // this method is called when your extension is deactivated
 export function deactivate() { }
 
-function preprocessBlockComments(word: string[]) {
+function checkForClass(str: string, cnt: number) {
+	if(includeExcludingComment(str, cnt, "class")) {
+		return true;
+	} else {
+		return false;
+	}
+}
+function checkForMethod(alLLines: string[], cnt: number) {
+	if(includeExcludingComment(alLLines[cnt], cnt, "public") || includeExcludingComment(alLLines[cnt], cnt, "private") || includeExcludingComment(alLLines[cnt], cnt, "protected")) {
+		if(includeExcludingComment(alLLines[cnt], cnt, "(") || includeExcludingComment(alLLines[cnt + 1], cnt + 1, "(")) {
+			if(countSpacesBeforeCode(alLLines[cnt])) {
+				
+			}
+		}
+	} else {
+
+	}
+}
+function preprocessBlockComments(word: string[], i: number) {
 	let toSearchOne: string = "/*";
 	let toSearchTwo: string = "*/";
-	for(let i = 0; i < word.length; ++i) {
-		if(word[i].includes(toSearchOne)) {
-			startBlockComments.push(i);
+	if(word[i].includes(toSearchOne)) {
+		startBlockComments.push(i);
+	}
+	if(word[i].includes(toSearchTwo)) {
+		endBlockComments.push(i);
+	}
+}
+function preprocess() {
+	if(preDoc === undefined) return;
+	let allLines = preDoc.split('\n');
+	for(let i = 0; i < allLines.length; ++i) {
+		if(allLines[i].trim().length === 0) {
+			allLines.splice(i, 1);
+		}
+		preprocessBlockComments(allLines, i);
+		if(checkForClass(allLines[i], i)) {
+			let tmpIndent = countSpacesBeforeCode(allLines[i]);
+			if(tmpIndent !== undefined) {
+				classIndents.push(tmpIndent);
+			}
 		}
 	}
-	for(let i = 0; i < word.length; ++i) {
-		if(word[i].includes(toSearchTwo)) {
-			endBlockComments.push(i);
-		}
-	}
+	let newWord:string = allLines.join('\n');
+	return newWord;
 }
 function countSpacesBeforeCode(strLine: string) {
 	let cnt = 0;
@@ -230,11 +277,15 @@ function findWhereToClose(allLines: string[], currLine: number) {
 	}
 	return returnNum;
 }
-function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean) {
+function addJavaDoc(allLines: string[], indentPref: number) {
+	let indentArr: number[] = outlineProperIndent(allLines, indentPref);
+	console.log(indentArr);
+}
+function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, indentPref: number) {
 	word = word.replaceAll('\t', '  ');
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
-	let singleLoopFlag: boolean = false;
+	addJavaDoc(allLines, indentPref);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
 		if(includeExcludingComment(currentLine, i, "public") || includeExcludingComment(currentLine, i, "private")
@@ -288,6 +339,29 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean) {
 	}
 	let newWord = allLines.join('\n');
 	return newWord;
+}
+function outlineProperIndent(allLines: string[], indentPref: number) {
+	let indentPushNum: number = 0;
+	let indentTrackerArr = new Array<number>();
+	for(let i = 0; i < allLines.length; ++i) {
+		let currentLine: string = allLines[i];
+		indentTrackerArr.push(indentPushNum);
+		if(includeExcludingComment(currentLine, i, "class ") || (includeExcludingComment(currentLine, i, "final ") && !includeExcludingComment(currentLine, i, ";"))) {
+			++indentPushNum;
+		} else if((includeExcludingComment(currentLine, i, "private ") || includeExcludingComment(currentLine, i, "public ") || includeExcludingComment(currentLine, i, "protected "))) {
+			if(!includeExcludingComment(currentLine, i, ";") && !includeExcludingComment(currentLine, i, "=")) {
+				++indentPushNum;
+			}
+		} else if(includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "while(") || includeExcludingComment(currentLine, i, "if(") || includeExcludingComment(currentLine, i, "else ")) {
+			++indentPushNum;
+		} else if(includeExcludingComment(currentLine, i, "do") || includeExcludingComment(currentLine, i, "else{")) {
+			++indentPushNum;
+		}
+		if(includeExcludingComment(currentLine, i, "}") && !includeExcludingComment(currentLine, i, "{")) {
+			--indentPushNum;
+		}
+	}
+	return indentTrackerArr;
 }
 function performIndentation(range: vscode.Range, word: string, indentPref: number) {
 	word = preprocessString(word);
