@@ -289,7 +289,7 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, i
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
 		if(includeExcludingComment(currentLine, i, "public") || includeExcludingComment(currentLine, i, "private")
-			|| includeExcludingComment(currentLine, i, "protected") || includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "else(")
+			|| includeExcludingComment(currentLine, i, "protected") || includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "else")
 			|| includeExcludingComment(currentLine, i, "while(") || includeExcludingComment(currentLine, i, "do") || includeExcludingComment(currentLine, i, "if(")) {
 			if(includeExcludingComment(currentLine, i, "{")) {
 				if(includeExcludingComment(currentLine, i, "}") && !includeExcludingComment(currentLine, i, "else")) continue;
@@ -304,6 +304,7 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, i
 			}
 			if(includeExcludingComment(currentLine, i, "else") && includeExcludingComment(currentLine, i, "}")) {
 				if(currentLine.indexOf('}') < currentLine.indexOf("else")) {
+					console.log("Entered else reformer");
 					let spacesBefore = countSpacesBeforeCode(allLines[i]);
 					let tmpStr: string = "";
 					if(spacesBefore !== undefined) {
