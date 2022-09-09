@@ -1,15 +1,18 @@
 import { ConsoleReporter } from '@vscode/test-electron';
 import { systemDefaultPlatform } from '@vscode/test-electron/out/util';
 import { close, unwatchFile } from 'fs';
-import { allowedNodeEnvironmentFlags } from 'process';
+import { allowedNodeEnvironmentFlags, removeAllListeners } from 'process';
 import { start } from 'repl';
 import { isReadable } from 'stream';
+import * as cp from "child_process";
 import * as vscode from 'vscode';
 var startBlockComments: number[] = [];
 var endBlockComments: number[] = [];
 var classIndents: number[] = [];
 const editor = vscode.window.activeTextEditor;
 let preDoc = editor?.document.getText();
+let fixedIndentation: boolean = false;
+let classIndentation: number = 0;
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Checkstlye converter is currently active!');
 	let changePP: boolean = false;
@@ -70,22 +73,34 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(disposableThree);
 	let disposableFour = vscode.commands.registerCommand('checkstyle-converter.changeIndentPreference', async () => {
-		const searchQuery = await vscode.window.showInputBox({
-			placeHolder: "Indentation Preference Spaces",
-			prompt: "Enter Indentation Preference",
-			password: false,
-			title: "Indentation Preference"
-		});
-		if(searchQuery === ''){
-			vscode.window.showErrorMessage('A search query is mandatory to execute this action');
-		}
-		if(searchQuery !== undefined) {
-			indentPreference = +searchQuery;
-		}
-		vscode.window.showInformationMessage("Changed your indent preference to: " + indentPreference);
+		const choices = ["1", "2", "3", "4", "5", "6", "7", "8"];
+		let tmp;
+		return new Promise((resolve) => {
+			const quickPick = vscode.window.createQuickPick();
+			quickPick.items = choices.map(choice => ({ label: choice }));
+			quickPick.title = 'Select your indentation preference:';
+			quickPick.onDidChangeValue(() => {
+				if (!choices.includes(quickPick.value)) quickPick.items = [quickPick.value, ...choices].map(label => ({ label }))
+			});
+			quickPick.onDidAccept(() => {
+				const selection = quickPick.activeItems[0];
+				tmp = selection.label;
+				resolve(selection.label);
+				if(tmp !== undefined) {
+					indentPreference = +tmp;
+				} else {
+					vscode.window.showInformationMessage("Pick a search query to change the indentation preference.");
+					return;
+				}
+				vscode.window.showInformationMessage("Changed your indent preference to: " + indentPreference);
+				quickPick.hide();
+			})
+			quickPick.show();
+		})
 	});
 	context.subscriptions.push(disposableFour);
 	let disposableFive = vscode.commands.registerCommand('checkstyle-converter.fixIndentation', () => {
+		fixedIndentation = true;
 		const editor = vscode.window.activeTextEditor;
 		if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 			editor.edit(editBuilder => {
@@ -124,13 +139,6 @@ export function activate(context: vscode.ExtensionContext) {
 // this method is called when your extension is deactivated
 export function deactivate() { }
 
-function checkForClass(str: string, cnt: number) {
-	if(includeExcludingComment(str, cnt, "class")) {
-		return true;
-	} else {
-		return false;
-	}
-}
 function checkForMethod(alLLines: string[], cnt: number) {
 	if(includeExcludingComment(alLLines[cnt], cnt, "public") || includeExcludingComment(alLLines[cnt], cnt, "private") || includeExcludingComment(alLLines[cnt], cnt, "protected")) {
 		if(includeExcludingComment(alLLines[cnt], cnt, "(") || includeExcludingComment(alLLines[cnt + 1], cnt + 1, "(")) {
@@ -142,32 +150,39 @@ function checkForMethod(alLLines: string[], cnt: number) {
 
 	}
 }
-function preprocessBlockComments(word: string[], i: number) {
+function preprocessBlockComments(allLines: string[]) {
 	let toSearchOne: string = "/*";
 	let toSearchTwo: string = "*/";
-	if(word[i].includes(toSearchOne)) {
-		startBlockComments.push(i);
+	var tmpStartComments: number[] = [];
+	var tmpEndComments: number[] = [];
+	for(let i = 0; i < allLines.length; ++i) {
+		if(allLines[i].includes(toSearchOne)) {
+			tmpStartComments.push(i);
+		}
+		if(allLines[i].includes(toSearchTwo)) {
+			tmpEndComments.push(i);
+		}
 	}
-	if(word[i].includes(toSearchTwo)) {
-		endBlockComments.push(i);
-	}
+	startBlockComments = tmpStartComments;
+	endBlockComments = tmpEndComments;
 }
 function preprocess() {
 	if(preDoc === undefined) return;
+
 	let allLines = preDoc.split('\n');
 	for(let i = 0; i < allLines.length; ++i) {
 		if(allLines[i].trim().length === 0) {
 			allLines.splice(i, 1);
 		}
-		preprocessBlockComments(allLines, i);
-		if(checkForClass(allLines[i], i)) {
-			let tmpIndent = countSpacesBeforeCode(allLines[i]);
-			if(tmpIndent !== undefined) {
-				classIndents.push(tmpIndent);
-			}
-		}
+		preprocessBlockComments(allLines);
 	}
 	let newWord:string = allLines.join('\n');
+	newWord = newWord.replace("@ author", "@author");
+	newWord = newWord.replace("@Author", "@author");
+	newWord = newWord.replace("@ version", "@version");
+	newWord = newWord.replace("@Version", "@version");
+	newWord = newWord.replace("@ description", "@description");
+	newWord = newWord.replace("@Description", "@description");
 	return newWord;
 }
 function countSpacesBeforeCode(strLine: string) {
@@ -278,14 +293,84 @@ function findWhereToClose(allLines: string[], currLine: number) {
 	return returnNum;
 }
 function addJavaDoc(allLines: string[], indentPref: number) {
-	let indentArr: number[] = outlineProperIndent(allLines, indentPref);
-	console.log(indentArr);
+	for(let i = 0; i < allLines.length; ++i) {
+		let indentArr: number[] = outlineProperIndent(allLines, indentPref);
+		if(includeExcludingComment(allLines[i], i, "class")) {
+			classIndentation = indentArr[i];
+			let tmpStr = "";
+			for(let j = 0; j < classIndentation * indentPref; ++j) {
+				tmpStr += " ";
+			}
+			if(includeExcludingComment(allLines[i - 1], i - 1, "*/")) {
+				let tmpIndex = endBlockComments.indexOf(i - 1);
+				let hasAuthor: boolean = false, hasVersion: boolean = false, hasDescription: boolean = false;
+				for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
+					if(allLines[j].includes("@author")) hasAuthor = true;
+					if(allLines[j].includes("@description")) hasDescription = true;
+					if(allLines[j].includes("@version")) hasVersion = true;
+				}
+				if(!hasAuthor) {
+					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @author");
+				}
+				if(!hasDescription) {
+					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @description");
+				}
+				if(!hasVersion) {
+					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @version");
+				}
+			} else {
+				allLines[i] = tmpStr + "/*\n" + tmpStr + " * @description \n" + tmpStr + " * @author \n" + tmpStr + " * @version\n" + tmpStr + " */\n" + allLines[i];
+			}
+		} else if((includeExcludingComment(allLines[i], i, "public") || includeExcludingComment(allLines[i], i, "private") || includeExcludingComment(allLines[i], i, "protected")) 
+		&& !includeExcludingComment(allLines[i], i, "final") && !includeExcludingComment(allLines[i], i, ";") && (includeExcludingComment(allLines[i], i, "(") || includeExcludingComment(allLines[i + 1], i + 1, "("))) {
+			if((includeExcludingComment(allLines[i], i, "public") && includeExcludingComment(allLines[i], i, "static") && includeExcludingComment(allLines[i], i, "void") && includeExcludingComment(allLines[i], i, "main")
+			&& includeExcludingComment(allLines[i], i, "String") && includeExcludingComment(allLines[i], i, "args"))) {
+				continue;
+			}
+			let tmpIndent = countSpacesBeforeCode(allLines[i]);
+			if(tmpIndent !== undefined) {
+				if(tmpIndent = classIndentation + indentPref) {
+					let tmpStr = "";
+					let hasParam: boolean = false, hasReturn: boolean = false, hasPre: boolean = false, hasPost: boolean = false;
+					for(let j = 0; j < indentArr[i] * indentPref; ++j) {
+						tmpStr += " ";
+					}
+					if(includeExcludingComment(allLines[i - 1], i - 1, "*/")) {
+						let tmpIndex = endBlockComments.indexOf(i - 1);
+						let hasAuthor: boolean = false, hasVersion: boolean = false, hasDescription: boolean = false;
+						for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
+							if(allLines[j].includes("@param")) hasParam = true;
+							if(allLines[j].includes("@return")) hasReturn = true;
+							if(allLines[j].includes("@precondition")) hasPre = true;
+							if(allLines[j].includes("@postcondition")) hasPost = true;
+						}
+						if(!hasParam) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @param");
+						}
+						if(!hasReturn) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @return");
+						}
+						if(!hasPre) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @precondition");
+						}
+						if(!hasPost) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @postcondition");
+						}
+					} else {
+						allLines[i] = tmpStr + "/*\n" + tmpStr + " * @param \n" + tmpStr + " * @precondition \n" + tmpStr + " * @postcondition\n" + tmpStr + " * @return \n" + tmpStr + " */\n" + allLines[i];
+					}
+				}
+			}
+		}
+	}
+	return allLines;
 }
 function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, indentPref: number) {
 	word = word.replaceAll('\t', '  ');
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
-	addJavaDoc(allLines, indentPref);
+	preprocessBlockComments(allLines);
+	allLines = addJavaDoc(allLines, indentPref);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
 		if(includeExcludingComment(currentLine, i, "public") || includeExcludingComment(currentLine, i, "private")
@@ -304,7 +389,6 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, i
 			}
 			if(includeExcludingComment(currentLine, i, "else") && includeExcludingComment(currentLine, i, "}")) {
 				if(currentLine.indexOf('}') < currentLine.indexOf("else")) {
-					console.log("Entered else reformer");
 					let spacesBefore = countSpacesBeforeCode(allLines[i]);
 					let tmpStr: string = "";
 					if(spacesBefore !== undefined) {
@@ -332,7 +416,6 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, i
 		}
 		if(flagPP && includeExcludingComment(currentLine, i, "++")) {
 			const indexPP = currentLine.indexOf("++");
-			//if(currentLine[indexPP + 2] == ' ' || currentLine[indexPP + 2] == ')') continue;
 			const usedVariable = allLines[i][indexPP + 2];
 			if(includeExcludingComment(currentLine, i, "++" + usedVariable)) continue;
 			allLines[i] = allLines[i].replace("++" + usedVariable, usedVariable + "++");
@@ -344,6 +427,7 @@ function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, i
 function outlineProperIndent(allLines: string[], indentPref: number) {
 	let indentPushNum: number = 0;
 	let indentTrackerArr = new Array<number>();
+	preprocessBlockComments(allLines);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
 		indentTrackerArr.push(indentPushNum);
@@ -367,6 +451,7 @@ function outlineProperIndent(allLines: string[], indentPref: number) {
 function performIndentation(range: vscode.Range, word: string, indentPref: number) {
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
+	preprocessBlockComments(allLines);
 	let retLines = new Array<string>();
 	let properIndent = 0;
 	let indentPushNum = 0;
@@ -380,15 +465,22 @@ function performIndentation(range: vscode.Range, word: string, indentPref: numbe
 				if(normalNextIndent) {
 					if(onlyCloseBrace(currentLine)) {
 						allLines[i] = setSpacesBeforeCode(currentLine, (indentPushNum - 1) * indentPref, indentTracker);
-						retLines.push(allLines[i]);
+						//retLines.push(allLines[i]);
 					} else {
 						allLines[i] = setSpacesBeforeCode(currentLine, properIndent, indentTracker);
-						retLines.push(allLines[i]);
+						//retLines.push(allLines[i]);
 					}
 				} else {
 					allLines[i] = setSpacesBeforeCode(currentLine, (indentPushNum - 1) * indentPref, indentTracker);
-					retLines.push(allLines[i]);
+					//retLines.push(allLines[i]);
 					normalNextIndent = true;
+				}
+				for(let j = 0; j < startBlockComments.length; ++j) {
+					if(i > startBlockComments[j] && i <= endBlockComments[j]) {
+						if(!includeExcludingComment(allLines[i], i, "/*")) {
+							allLines[i] = " " + allLines[i]; // FIX INDENTATION PROBLEM WITH BLOCK COMMENTS
+						}
+					}
 				}
 			}
 		}
@@ -423,6 +515,6 @@ function performIndentation(range: vscode.Range, word: string, indentPref: numbe
 			--indentPushNum;
 		}
 	}
-	let newWord:string = retLines.join('\n');
+	let newWord:string = allLines.join('\n');
 	return newWord;
 }

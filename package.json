@@ -3,7 +3,7 @@
   "publisher": "25DanielG",
   "displayName": "Checkstyle Converter",
   "description": "Converts java code to conform with checkstyle standards",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "repository": {
     "type": "git",
     "url": "https://github.com/25DanielG/checkstyle-converter.git"
@@ -27,27 +27,27 @@
     "commands": [
       {
         "command": "checkstyle-converter.convertCheckstyle",
-        "title": "Convert Checkstyle"
+        "title": "Checkstyle Converter: Convert Checkstyle"
       },
       {
         "command": "checkstyle-converter.convertCheckstyleWithSelction",
-        "title": "Convert Checkstyle Selection"
+        "title": "Checkstyle Converter: Convert Checkstyle Selection"
       },
       {
         "command": "checkstyle-converter.togglePlusPlus",
-        "title": "Toggle Increment Style"
+        "title": "Checkstyle Converter: Toggle Increment Style"
       },
       {
         "command": "checkstyle-converter.changeIndentPreference",
-        "title": "Change Indent Preference"
+        "title": "Checkstyle Converter: Change Indent Preference"
       },
       {
         "command": "checkstyle-converter.fixIndentation",
-        "title": "Fix Indentation"
+        "title": "Checkstyle Converter: Fix Indentation"
       },
       {
         "command": "checkstyle-converter.fixIndentationSelection",
-        "title": "Fix Indentation Selection"
+        "title": "Checkstyle Converter: Fix Indentation Selection"
       }
     ]
   },
@@ -63,19 +63,22 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.70.0",
     "@types/glob": "^7.2.0",
     "@types/mocha": "^9.1.1",
     "@types/node": "16.x",
+    "@types/vscode": "^1.70.0",
     "@typescript-eslint/eslint-plugin": "^5.31.0",
     "@typescript-eslint/parser": "^5.31.0",
+    "@vscode/test-electron": "^2.1.5",
     "eslint": "^8.20.0",
     "glob": "^8.0.3",
     "mocha": "^10.0.0",
-    "typescript": "^4.7.4",
     "ts-loader": "^9.3.1",
+    "typescript": "^4.7.4",
     "webpack": "^5.74.0",
-    "webpack-cli": "^4.10.0",
-    "@vscode/test-electron": "^2.1.5"
+    "webpack-cli": "^4.10.0"
+  },
+  "dependencies": {
+    "childprocess": "^2.0.2"
   }
 }
