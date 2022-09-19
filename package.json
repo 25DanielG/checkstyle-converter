@@ -1,84 +1,137 @@
 {
-  "name": "checkstyle-converter",
-  "publisher": "25DanielG",
-  "displayName": "Checkstyle Converter",
-  "description": "Converts java code to conform with checkstyle standards",
-  "version": "0.0.7",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/25DanielG/checkstyle-converter.git"
-  },
-  "engines": {
-    "vscode": "^1.70.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onCommand:checkstyle-converter.convertCheckstyle",
-    "onCommand:checkstyle-converter.convertCheckstyleWithSelction",
-    "onCommand:checkstyle-converter.togglePlusPlus",
-    "onCommand:checkstyle-converter.changeIndentPreference",
-    "onCommand:checkstyle-converter.fixIndentation",
-    "onCommand:checkstyle-converter.fixIndentationSelection"
-  ],
-  "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "checkstyle-converter.convertCheckstyle",
-        "title": "Checkstyle Converter: Convert Checkstyle"
-      },
-      {
-        "command": "checkstyle-converter.convertCheckstyleWithSelction",
-        "title": "Checkstyle Converter: Convert Checkstyle Selection"
-      },
-      {
-        "command": "checkstyle-converter.togglePlusPlus",
-        "title": "Checkstyle Converter: Toggle Increment Style"
-      },
-      {
-        "command": "checkstyle-converter.changeIndentPreference",
-        "title": "Checkstyle Converter: Change Indent Preference"
-      },
-      {
-        "command": "checkstyle-converter.fixIndentation",
-        "title": "Checkstyle Converter: Fix Indentation"
-      },
-      {
-        "command": "checkstyle-converter.fixIndentationSelection",
-        "title": "Checkstyle Converter: Fix Indentation Selection"
-      }
-    ]
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
-  },
-  "devDependencies": {
-    "@types/glob": "^7.2.0",
-    "@types/mocha": "^9.1.1",
-    "@types/node": "16.x",
-    "@types/vscode": "^1.70.0",
-    "@typescript-eslint/eslint-plugin": "^5.31.0",
-    "@typescript-eslint/parser": "^5.31.0",
-    "@vscode/test-electron": "^2.1.5",
-    "eslint": "^8.20.0",
-    "glob": "^8.0.3",
-    "mocha": "^10.0.0",
-    "ts-loader": "^9.3.1",
-    "typescript": "^4.7.4",
-    "webpack": "^5.74.0",
-    "webpack-cli": "^4.10.0"
-  },
-  "dependencies": {
-    "childprocess": "^2.0.2"
-  }
+	"name": "checkstyle-converter",
+	"publisher": "25DanielG",
+	"displayName": "Checkstyle Converter",
+	"description": "Converts java code to conform with checkstyle standards",
+	"version": "0.0.8",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/25DanielG/checkstyle-converter.git"
+	},
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"ui",
+		"workspace"
+	],
+	"activationEvents": [
+		"onView:checkstyle-sidebar",
+		"onCommand:checkstyle-converter.convertCheckstyle",
+		"onCommand:checkstyle-converter.convertCheckstyleWithSelction",
+		"onCommand:checkstyle-converter.togglePlusPlus",
+		"onCommand:checkstyle-converter.changeIndentPreference",
+		"onCommand:checkstyle-converter.fixIndentation",
+		"onCommand:checkstyle-converter.fixIndentationSelection"
+	],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "checkstyle-sidebar-view",
+					"title": "Checkstyle Converter",
+					"icon": "media/icon.svg"
+				}
+			]
+		},
+		"views": {
+			"checkstyle-sidebar-view": [
+				{
+					"type": "webview",
+					"id": "checkstyle-sidebar",
+					"name": "CheckstyleConverter",
+					"icon": "media/icon.svg",
+					"contextualTitle": "CheckstyleConverter"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "checkstyle-converter.convertCheckstyle",
+				"title": "Checkstyle Converter: Convert Checkstyle"
+			},
+			{
+				"command": "checkstyle-converter.convertCheckstyleWithSelction",
+				"title": "Checkstyle Converter: Convert Checkstyle Selection"
+			},
+			{
+				"command": "checkstyle-converter.togglePlusPlus",
+				"title": "Checkstyle Converter: Toggle Increment Style"
+			},
+			{
+				"command": "checkstyle-converter.changeIndentPreference",
+				"title": "Checkstyle Converter: Change Indent Preference"
+			},
+			{
+				"command": "checkstyle-converter.fixIndentation",
+				"title": "Checkstyle Converter: Fix Indentation"
+			},
+			{
+				"command": "checkstyle-converter.fixIndentationSelection",
+				"title": "Checkstyle Converter: Fix Indentation Selection"
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run package",
+		"compile": "webpack",
+		"watch": "concurrently \"tsc --outDir dist/lib --declarationDir dist/types --declaration true\" \"rollup -c -w\" \"webpack --mode development --watch\"",
+		"package": "webpack --mode production --devtool hidden-source-map",
+		"test-compile": "tsc -p ./",
+		"test-watch": "tsc -watch -p ./",
+		"pretest": "npm run test-compile && npm run lint",
+		"lint": "eslint src --ext ts",
+		"test": "node ./out/test/runTest.js"
+	},
+	"dependencies": {
+		"@types/jest": "^26.0.15",
+		"@types/node-fetch": "^2.5.7",
+		"@types/polka": "^0.5.1",
+		"@types/socket.io-client": "^1.4.34",
+		"axios": "^0.21.1",
+		"childprocess": "^2.0.2",
+		"dotenv": "^8.2.0",
+		"firebase": "^8.1.1",
+		"jest": "^26.6.3",
+		"minimist": "^1.2.6",
+		"node-fetch": "^2.6.1",
+		"polka": "^0.5.2",
+		"socket.io-client": "^3.0.2",
+		"vscode-uri": "^3.0.4"
+	},
+	"devDependencies": {
+		"@rollup/plugin-commonjs": "^20.0.0",
+		"@rollup/plugin-node-resolve": "^13.3.0",
+		"@rollup/plugin-typescript": "^8.5.0",
+		"@tsconfig/svelte": "^2.0.1",
+		"@types/glob": "^7.2.0",
+		"@types/mocha": "^9.1.1",
+		"@types/node": "16.x",
+		"@types/polka": "^0.5.3",
+		"@types/vscode": "^1.71.0",
+		"@types/vscode-webview": "^1.57.0",
+		"@typescript-eslint/eslint-plugin": "^5.31.0",
+		"@typescript-eslint/parser": "^5.31.0",
+		"@vscode/test-electron": "^2.1.5",
+		"concurrently": "^6.5.1",
+		"eslint": "^8.20.0",
+		"glob": "^8.0.3",
+		"mocha": "^10.0.0",
+		"rollup": "^2.79.0",
+		"rollup-plugin-svelte": "^7.1.0",
+		"rollup-plugin-terser": "^7.0.2",
+		"svelte": "^3.50.1",
+		"svelte-check": "^2.9.0",
+		"svelte-preprocess": "^4.10.7",
+		"ts-loader": "^9.3.1",
+		"typescript": "^4.8.3",
+		"typescript-svelte-plugin": "^0.3.9",
+		"vscode-test": "^1.5.2",
+		"webpack": "^5.74.0",
+		"webpack-cli": "^4.10.0"
+	}
 }
