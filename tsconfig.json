@@ -1,18 +1,14 @@
 {
 	"compilerOptions": {
 		"module": "commonjs",
-		"target": "es2020",
+		"target": "es2021",
 		"outDir": "out",
 		"lib": [
 			"es6",
-			"es2021.String",
-			"es2020"
+			"ES2021.String"
 		],
 		"sourceMap": true,
 		"rootDir": "src",
-		"plugins": [{
-            "name": "typescript-svelte-plugin"
-        }],
 		"allowSyntheticDefaultImports": true,
 		"strict": true /* enable all strict type-checking options */
 		/* Additional Checks */
@@ -23,6 +19,5 @@
 	"exclude": [
 		"node_modules",
 		".vscode-test",
-		"webviews"
 	]
 }

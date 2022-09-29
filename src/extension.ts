@@ -1,8 +1,3 @@
-import { SidebarProvider } from './SidebarProvider';
-import { close, unwatchFile } from 'fs';
-import { allowedNodeEnvironmentFlags, removeAllListeners } from 'process';
-import { start } from 'repl';
-import * as cp from "child_process";
 import * as vscode from 'vscode';
 var startBlockComments: number[] = [];
 var endBlockComments: number[] = [];
@@ -13,13 +8,6 @@ export var indentPreference = 2;
 export var changePP: boolean = false;
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Checkstlye converter is currently active!');
-    const sidebarProvider = new SidebarProvider(context.extensionUri);
-	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider(
-			"checkstyle-sidebar",
-			sidebarProvider
-		)
-	);
 	if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 		editor.edit(editBuilder => {
 			const firstLine = editor.document.lineAt(0);
@@ -83,7 +71,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			quickPick.items = choices.map(choice => ({ label: choice }));
 			quickPick.title = 'Select your indentation preference:';
 			quickPick.onDidChangeValue(() => {
-				if (!choices.includes(quickPick.value)) quickPick.items = [quickPick.value, ...choices].map(label => ({ label }))
+				if (!choices.includes(quickPick.value)) quickPick.items = [quickPick.value, ...choices].map(label => ({ label }));
 			});
 			quickPick.onDidAccept(() => {
 				const selection = quickPick.activeItems[0];
@@ -252,7 +240,7 @@ function includeExcludingComment(str: string, cnt: number, toFind: string) {
 			if(cnt > startBlockComments[i] && cnt < endBlockComments[i]) {
 				return false;
 			} else if(cnt === startBlockComments[i] && cnt === endBlockComments[i]) {
-				if(indexOf > str.indexOf("/*") && indexOf < str.indexOf("*/")) return false
+				if(indexOf > str.indexOf("/*") && indexOf < str.indexOf("*/")) return false;
 			} else if(cnt === startBlockComments[i]) {
 				if(indexOf > str.indexOf("/*")) return false;
 			} else if(cnt === endBlockComments[i]) {
