@@ -18,6 +18,13 @@
 		"ui",
 		"workspace"
 	],
+	"keywords": [
+        "checkstlye",
+		"convert",
+		"javadoc",
+		"indent",
+		"automatic"
+    ],
 	"activationEvents": [
 		"onView:checkstyle-sidebar",
 		"onCommand:checkstyle-converter.convertCheckstyle",
