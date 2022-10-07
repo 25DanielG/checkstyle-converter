@@ -157,6 +157,7 @@ function preprocess() {
 	for(let i = 0; i < allLines.length; ++i) {
 		if(allLines[i].trim().length === 0) {
 			allLines.splice(i, 1);
+			--i;
 		}
 		preprocessBlockComments(allLines);
 	}
@@ -252,7 +253,6 @@ function includeExcludingComment(str: string, cnt: number, toFind: string) {
 	return false;
 }
 function findWhereToClose(allLines: string[], currLine: number) {
-	let currentLine = allLines[currLine];
 	let returnNum: number = -1;
 	for(let tmpCnt:number = currLine + 1; tmpCnt < allLines.length; ++tmpCnt) {
 		if(includeExcludingComment(allLines[tmpCnt], tmpCnt, "for(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "else(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "while(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "if(")) {
@@ -350,7 +350,8 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 	return allLines;
 }
 export function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, indentPref: number) {
-	word = word.replaceAll('\t', '  ');
+	let spaceString: string = makeSpaceString(indentPref);
+	word = word.replaceAll('\t', spaceString);
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
 	preprocessBlockComments(allLines);
@@ -502,33 +503,10 @@ export function performIndentation(range: vscode.Range, word: string, indentPref
 	let newWord:string = allLines.join('\n');
 	return newWord;
 }
-export function doCheckstyle() {
-	const editor = vscode.window.activeTextEditor;
-	if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
-		editor.edit(editBuilder => {
-			const firstLine = editor.document.lineAt(0);
-			const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
-			const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
-			let word = editor.document.getText();
-			let newWord: string = performCheckstyle(range, word, changePP, indentPreference);
-			editBuilder.replace(range, newWord);
-		});
-	} else {
-		vscode.window.showInformationMessage("No active editor open or editor is not a .java or .jt file.");
+function makeSpaceString(indentPreference: number) {
+	let spaceString: string = "";
+	for(let i = 0; i < indentPreference; ++i) {
+		spaceString += " ";
 	}
-}
-export function doIndentation() {
-	const editor = vscode.window.activeTextEditor;
-	if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
-		editor.edit(editBuilder => {
-			const firstLine = editor.document.lineAt(0);
-			const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
-			const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
-			let word = editor.document.getText();
-			let newWord:string = performIndentation(range, word, indentPreference);
-			editBuilder.replace(range, newWord);
-		});
-	} else {
-		vscode.window.showInformationMessage("No active editor open or editor is not a .java of .jt file.");
-	}
+	return spaceString;
 }
