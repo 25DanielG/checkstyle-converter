@@ -1,6 +1,8 @@
+import { start } from 'repl';
 import * as vscode from 'vscode';
 var startBlockComments: number[] = [];
 var endBlockComments: number[] = [];
+var startStrings: number[] = [];
 const editor = vscode.window.activeTextEditor;
 let preDoc = editor?.document.getText();
 let classIndentation: number = 0;
@@ -32,10 +34,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText();
-				console.log("Entered checkstyle function.");
 				let newWord: string = performCheckstyle(range, word, changePP, indentPreference);
 				editBuilder.replace(range, newWord);
-				console.log("Repalced text.");
 			});
 		} else {
 			vscode.window.showInformationMessage("No active editor open or editor is not a .java or .jt file.");
@@ -152,6 +152,16 @@ function preprocessBlockComments(allLines: string[]) {
 	startBlockComments = tmpStartComments;
 	endBlockComments = tmpEndComments;
 }
+function preprocessQuotedStrings(allLines: string[]) {
+	let toSearchOne: string = '"';
+	var tmpStartStrings: number[] = [];
+	for(let i = 0; i < allLines.length; ++i) {
+		if(allLines[i].includes(toSearchOne)) {
+			tmpStartStrings.push(i);
+		}
+	}
+	startStrings = tmpStartStrings;
+}
 function preprocess() {
 	if(preDoc === undefined) return;
 
@@ -162,6 +172,7 @@ function preprocess() {
 			--i;
 		}
 		preprocessBlockComments(allLines);
+		preprocessQuotedStrings(allLines);
 	}
 	let newWord:string = allLines.join('\n');
 	newWord = newWord.replace("@ author", "@author");
@@ -232,15 +243,12 @@ function preprocessString(fullDoc: string) {
 	return fullDoc;
 }
 function includeExcludingComment(str: string, cnt: number, toFind: string) {
-	console.log("Entered including excluding");
 	if(str.includes(toFind)) {
 		let indexOf = str.indexOf(toFind);
 		if(str.includes("//")) {
-			console.log("single line comment if");
 			let indexOfSlash: number = str.indexOf("//");
 			if(indexOf > indexOfSlash) return false;
 		}
-		console.log("After single comment");
 		for(let i = 0; i < startBlockComments.length; ++i) {
 			if(cnt > startBlockComments[i] && cnt < endBlockComments[i]) {
 				return false;
@@ -254,19 +262,54 @@ function includeExcludingComment(str: string, cnt: number, toFind: string) {
 		}
 		return true;
 	}
-	console.log("returns from including excluding")
 	return false;
+}
+function includeExcludingCommentString(str: string, cnt: number, toFind: string) {
+	if(str.includes(toFind)) {
+		let indexOf = str.indexOf(toFind);
+		if(str.includes("//")) {
+			let indexOfSlash: number = str.indexOf("//");
+			if(indexOf > indexOfSlash) return false;
+		}
+		for(let i = 0; i < startBlockComments.length; ++i) {
+			if(cnt > startBlockComments[i] && cnt < endBlockComments[i]) {
+				return false;
+			} else if(cnt === startBlockComments[i] && cnt === endBlockComments[i]) {
+				if(indexOf > str.indexOf("/*") && indexOf < str.indexOf("*/")) return false;
+			} else if(cnt === startBlockComments[i]) {
+				if(indexOf > str.indexOf("/*")) return false;
+			} else if(cnt === endBlockComments[i]) {
+				if(indexOf < str.indexOf("/*")) return false;
+			}
+		}
+		if(startStrings.includes(cnt)) {
+			for(let i = 0; i < startStrings.length; ++i) {
+				const indexes = [];
+				for (let j = 0; j < str.length; ++j) {
+					if (str[j] === '"') {
+						indexes.push(j);
+					}
+				}
+				for(let j = 0; j < indexes.length; j += 2) {
+					if(indexOf > indexes[i] && indexOf < indexes[i + 1]) {
+						return false;
+					}
+				}
+			}
+		}
+		return true;
+	}
 }
 function findWhereToClose(allLines: string[], currLine: number) {
 	let returnNum: number = -1;
 	for(let tmpCnt:number = currLine + 1; tmpCnt < allLines.length; ++tmpCnt) {
-		if(includeExcludingComment(allLines[tmpCnt], tmpCnt, "for(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "else(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "while(") || includeExcludingComment(allLines[tmpCnt], tmpCnt, "if(")) {
-			if(!includeExcludingComment(allLines[tmpCnt], tmpCnt, "{") && !onlyOpenBrace(allLines[tmpCnt + 1])) {
+		if(includeExcludingCommentString(allLines[tmpCnt], tmpCnt, "for(") || includeExcludingCommentString(allLines[tmpCnt], tmpCnt, "else(") || includeExcludingCommentString(allLines[tmpCnt], tmpCnt, "while(") || includeExcludingCommentString(allLines[tmpCnt], tmpCnt, "if(")) {
+			if(!includeExcludingCommentString(allLines[tmpCnt], tmpCnt, "{") && !onlyOpenBrace(allLines[tmpCnt + 1])) {
 				returnNum = findWhereToClose(allLines, tmpCnt);
 			} else {
 				while(true) {
-					if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '}')) {
-						if(includeExcludingComment(allLines[tmpCnt], tmpCnt, '{') && allLines[tmpCnt].indexOf('{') < allLines[tmpCnt].indexOf('}')) {
+					if(includeExcludingCommentString(allLines[tmpCnt], tmpCnt, '}')) {
+						if(includeExcludingCommentString(allLines[tmpCnt], tmpCnt, '{') && allLines[tmpCnt].indexOf('{') < allLines[tmpCnt].indexOf('}')) {
 							++tmpCnt;
 							continue;
 						}
@@ -284,16 +327,13 @@ function findWhereToClose(allLines: string[], currLine: number) {
 function addJavaDoc(allLines: string[], indentPref: number) {
 	for(let i = 0; i < allLines.length; ++i) {
 		let indentArr: number[] = outlineProperIndent(allLines, indentPref);
-		console.log("On line: " + i);
-		console.log("Indet push num: " + indentArr[i]);
-		console.log(allLines[i]);
-		if(includeExcludingComment(allLines[i], i, "class")) {
+		if(includeExcludingCommentString(allLines[i], i, "class")) {
 			classIndentation = indentArr[i];
 			let tmpStr = "";
 			for(let j = 0; j < classIndentation * indentPref; ++j) {
 				tmpStr += " ";
 			}
-			if(i !== 0 && includeExcludingComment(allLines[i - 1], i - 1, "*/")) {
+			if(i !== 0 && includeExcludingCommentString(allLines[i - 1], i - 1, "*/")) {
 				let tmpIndex = endBlockComments.indexOf(i - 1);
 				let hasAuthor: boolean = false, hasVersion: boolean = false, hasDescription: boolean = false;
 				for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
@@ -313,10 +353,10 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 			} else {
 				allLines[i] = tmpStr + "/*\n" + tmpStr + " * @description \n" + tmpStr + " * @author \n" + tmpStr + " * @version\n" + tmpStr + " */\n" + allLines[i];
 			}
-		} else if((includeExcludingComment(allLines[i], i, "public") || includeExcludingComment(allLines[i], i, "private") || includeExcludingComment(allLines[i], i, "protected")) 
-		&& !includeExcludingComment(allLines[i], i, "final") && !includeExcludingComment(allLines[i], i, ";") && (includeExcludingComment(allLines[i], i, "(") || includeExcludingComment(allLines[i + 1], i + 1, "("))) {
-			if((includeExcludingComment(allLines[i], i, "public") && includeExcludingComment(allLines[i], i, "static") && includeExcludingComment(allLines[i], i, "void") && includeExcludingComment(allLines[i], i, "main")
-			&& includeExcludingComment(allLines[i], i, "String") && includeExcludingComment(allLines[i], i, "args"))) {
+		} else if((includeExcludingCommentString(allLines[i], i, "public") || includeExcludingCommentString(allLines[i], i, "private") || includeExcludingCommentString(allLines[i], i, "protected")) 
+		&& !includeExcludingCommentString(allLines[i], i, "final") && !includeExcludingCommentString(allLines[i], i, ";") && (includeExcludingCommentString(allLines[i], i, "(") || includeExcludingCommentString(allLines[i + 1], i + 1, "("))) {
+			if((includeExcludingCommentString(allLines[i], i, "public") && includeExcludingCommentString(allLines[i], i, "static") && includeExcludingCommentString(allLines[i], i, "void") && includeExcludingCommentString(allLines[i], i, "main")
+			&& includeExcludingCommentString(allLines[i], i, "String") && includeExcludingCommentString(allLines[i], i, "args"))) {
 				continue;
 			}
 			let tmpIndent = countSpacesBeforeCode(allLines[i]);
@@ -327,7 +367,7 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 					for(let j = 0; j < indentArr[i] * indentPref; ++j) {
 						tmpStr += " ";
 					}
-					if(includeExcludingComment(allLines[i - 1], i - 1, "*/")) {
+					if(includeExcludingCommentString(allLines[i - 1], i - 1, "*/")) {
 						let tmpIndex = endBlockComments.indexOf(i - 1);
 						let hasAuthor: boolean = false, hasVersion: boolean = false, hasDescription: boolean = false;
 						for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
@@ -363,17 +403,15 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
 	preprocessBlockComments(allLines);
-	console.log("Block comments processed.");
+	preprocessQuotedStrings(allLines);
 	allLines = addJavaDoc(allLines, indentPref);
-	console.log("Enetered loop.");
 	for(let i = 0; i < allLines.length; ++i) {
-		console.log("On line: " + i);
 		let currentLine: string = allLines[i];
-		if(includeExcludingComment(currentLine, i, "public") || includeExcludingComment(currentLine, i, "private")
-			|| includeExcludingComment(currentLine, i, "protected") || includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "else")
-			|| includeExcludingComment(currentLine, i, "while(") || includeExcludingComment(currentLine, i, "do") || includeExcludingComment(currentLine, i, "if(")) {
-			if(includeExcludingComment(currentLine, i, "{")) {
-				if(includeExcludingComment(currentLine, i, "}") && !includeExcludingComment(currentLine, i, "else")) continue;
+		if(includeExcludingCommentString(currentLine, i, "public") || includeExcludingCommentString(currentLine, i, "private")
+			|| includeExcludingCommentString(currentLine, i, "protected") || includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "else")
+			|| includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "do") || includeExcludingCommentString(currentLine, i, "if(")) {
+			if(includeExcludingCommentString(currentLine, i, "{")) {
+				if(includeExcludingCommentString(currentLine, i, "}") && !includeExcludingCommentString(currentLine, i, "else")) continue;
 				let spacesBefore = countSpacesBeforeCode(allLines[i]);
 				let tmpStr: string = "";
 				if(spacesBefore !== undefined) {
@@ -383,7 +421,7 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 				}
 				allLines[i] = allLines[i].replace('{', "\n" + tmpStr + "{");
 			}
-			if(includeExcludingComment(currentLine, i, "else") && includeExcludingComment(currentLine, i, "}")) {
+			if(includeExcludingCommentString(currentLine, i, "else") && includeExcludingCommentString(currentLine, i, "}")) {
 				if(currentLine.indexOf('}') < currentLine.indexOf("else")) {
 					let spacesBefore = countSpacesBeforeCode(allLines[i]);
 					let tmpStr: string = "";
@@ -395,8 +433,8 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 					allLines[i] = allLines[i].replace("else", "\n" + tmpStr + "else");
 				}
 			}
-			if(includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "else(") || includeExcludingComment(currentLine, i, "while(") || includeExcludingComment(currentLine, i, "if(")) {
-				if(!includeExcludingComment(currentLine, i, "{") && !onlyOpenBrace(allLines[i + 1])) {
+			if(includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "else(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(")) {
+				if(!includeExcludingCommentString(currentLine, i, "{") && !onlyOpenBrace(allLines[i + 1])) {
 					let spacesBefore = countSpacesBeforeCode(allLines[i]);
 					let tmpStr: string = "";
 					if(spacesBefore !== undefined) {
@@ -410,10 +448,10 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 				}
 			}
 		}
-		if(flagPP && includeExcludingComment(currentLine, i, "++")) {
+		if(flagPP && includeExcludingCommentString(currentLine, i, "++")) {
 			const indexPP = currentLine.indexOf("++");
 			const usedVariable = allLines[i][indexPP + 2];
-			if(includeExcludingComment(currentLine, i, "++" + usedVariable)) continue;
+			if(includeExcludingCommentString(currentLine, i, "++" + usedVariable)) continue;
 			allLines[i] = allLines[i].replace("++" + usedVariable, usedVariable + "++");
 		}
 	}
@@ -424,21 +462,22 @@ function outlineProperIndent(allLines: string[], indentPref: number) {
 	let indentPushNum: number = 0;
 	let indentTrackerArr = new Array<number>();
 	preprocessBlockComments(allLines);
+	preprocessQuotedStrings(allLines);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
 		indentTrackerArr.push(indentPushNum);
-		if(includeExcludingComment(currentLine, i, "class ") || (includeExcludingComment(currentLine, i, "final ") && !includeExcludingComment(currentLine, i, ";"))) {
+		if(includeExcludingCommentString(currentLine, i, "class ") || (includeExcludingCommentString(currentLine, i, "final ") && !includeExcludingCommentString(currentLine, i, ";"))) {
 			++indentPushNum;
-		} else if((includeExcludingComment(currentLine, i, "private ") || includeExcludingComment(currentLine, i, "public ") || includeExcludingComment(currentLine, i, "protected "))) {
-			if(!includeExcludingComment(currentLine, i, ";") && !includeExcludingComment(currentLine, i, "=")) {
+		} else if((includeExcludingCommentString(currentLine, i, "private ") || includeExcludingCommentString(currentLine, i, "public ") || includeExcludingCommentString(currentLine, i, "protected "))) {
+			if(!includeExcludingCommentString(currentLine, i, ";") && !includeExcludingCommentString(currentLine, i, "=")) {
 				++indentPushNum;
 			}
-		} else if((includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "while(") || includeExcludingComment(currentLine, i, "if(") || includeExcludingComment(currentLine, i, "else ")) && !includeExcludingComment(currentLine, i, ";")) {
+		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && !includeExcludingCommentString(currentLine, i, ";")) {
 			++indentPushNum;
-		} else if(includeExcludingComment(currentLine, i, "do ") || includeExcludingComment(currentLine, i, "do{") || includeExcludingComment(currentLine, i, "else{")) {
+		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
 			++indentPushNum;
 		}
-		if(includeExcludingComment(currentLine, i, "}") && !includeExcludingComment(currentLine, i, "{")) {
+		if(includeExcludingCommentString(currentLine, i, "}") && !includeExcludingCommentString(currentLine, i, "{")) {
 			--indentPushNum;
 		}
 	}
@@ -448,6 +487,7 @@ export function performIndentation(range: vscode.Range, word: string, indentPref
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
 	preprocessBlockComments(allLines);
+	preprocessQuotedStrings(allLines);
 	let retLines = new Array<string>();
 	let properIndent = 0;
 	let indentPushNum = 0;
@@ -473,41 +513,41 @@ export function performIndentation(range: vscode.Range, word: string, indentPref
 				}
 				for(let j = 0; j < startBlockComments.length; ++j) {
 					if(i > startBlockComments[j] && i <= endBlockComments[j]) {
-						if(!includeExcludingComment(allLines[i], i, "/*")) {
-							allLines[i] = " " + allLines[i]; // FIX INDENTATION PROBLEM WITH BLOCK COMMENTS
+						if(!includeExcludingCommentString(allLines[i], i, "/*")) {
+							allLines[i] = " " + allLines[i];
 						}
 					}
 				}
 			}
 		}
-		if(includeExcludingComment(currentLine, i, "class ") || (includeExcludingComment(currentLine, i, "final ") && !includeExcludingComment(currentLine, i, ";"))) {
+		if(includeExcludingCommentString(currentLine, i, "class ") || (includeExcludingCommentString(currentLine, i, "final ") && !includeExcludingCommentString(currentLine, i, ";"))) {
 			++indentPushNum;
 			let tmp = normalIndentWithBrace(allLines[i + 1]);
 			if(tmp !== undefined) {
 				normalNextIndent = tmp;
 			}
-		} else if((includeExcludingComment(currentLine, i, "private ") || includeExcludingComment(currentLine, i, "public ") || includeExcludingComment(currentLine, i, "protected "))) {
-			if(!includeExcludingComment(currentLine, i, ";") && !includeExcludingComment(currentLine, i, "=")) {
+		} else if((includeExcludingCommentString(currentLine, i, "private ") || includeExcludingCommentString(currentLine, i, "public ") || includeExcludingCommentString(currentLine, i, "protected "))) {
+			if(!includeExcludingCommentString(currentLine, i, ";") && !includeExcludingCommentString(currentLine, i, "=")) {
 				++indentPushNum;
 				let tmp = normalIndentWithBrace(allLines[i + 1]);
 				if(tmp !== undefined) {
 					normalNextIndent = tmp;
 				}
 			}
-		} else if((includeExcludingComment(currentLine, i, "for(") || includeExcludingComment(currentLine, i, "while(") || includeExcludingComment(currentLine, i, "if(") || includeExcludingComment(currentLine, i, "else ")) && !includeExcludingComment(currentLine, i, ";")) {
+		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && !includeExcludingCommentString(currentLine, i, ";")) {
 			++indentPushNum;
 			let tmp = normalIndentWithBrace(allLines[i + 1]);
 			if(tmp !== undefined) {
 				normalNextIndent = tmp;
 			}
-		} else if(includeExcludingComment(currentLine, i, "do ") || includeExcludingComment(currentLine, i, "do{") || includeExcludingComment(currentLine, i, "else{")) {
+		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
 			++indentPushNum;
 			let tmp = normalIndentWithBrace(allLines[i + 1]);
 			if(tmp !== undefined) {
 				normalNextIndent = tmp;
 			}
 		}
-		if(includeExcludingComment(currentLine, i, "}") && !includeExcludingComment(currentLine, i, "{")) {
+		if(includeExcludingCommentString(currentLine, i, "}") && !includeExcludingCommentString(currentLine, i, "{")) {
 			--indentPushNum;
 		}
 	}
