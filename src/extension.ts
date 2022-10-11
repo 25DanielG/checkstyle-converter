@@ -242,28 +242,6 @@ function preprocessString(fullDoc: string) {
 	fullDoc = fullDoc.replaceAll("else (", "else(");
 	return fullDoc;
 }
-function includeExcludingComment(str: string, cnt: number, toFind: string) {
-	if(str.includes(toFind)) {
-		let indexOf = str.indexOf(toFind);
-		if(str.includes("//")) {
-			let indexOfSlash: number = str.indexOf("//");
-			if(indexOf > indexOfSlash) return false;
-		}
-		for(let i = 0; i < startBlockComments.length; ++i) {
-			if(cnt > startBlockComments[i] && cnt < endBlockComments[i]) {
-				return false;
-			} else if(cnt === startBlockComments[i] && cnt === endBlockComments[i]) {
-				if(indexOf > str.indexOf("/*") && indexOf < str.indexOf("*/")) return false;
-			} else if(cnt === startBlockComments[i]) {
-				if(indexOf > str.indexOf("/*")) return false;
-			} else if(cnt === endBlockComments[i]) {
-				if(indexOf < str.indexOf("/*")) return false;
-			}
-		}
-		return true;
-	}
-	return false;
-}
 function includeExcludingCommentString(str: string, cnt: number, toFind: string) {
 	if(str.includes(toFind)) {
 		let indexOf = str.indexOf(toFind);
