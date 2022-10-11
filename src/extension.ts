@@ -369,7 +369,6 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 					}
 					if(includeExcludingCommentString(allLines[i - 1], i - 1, "*/")) {
 						let tmpIndex = endBlockComments.indexOf(i - 1);
-						let hasAuthor: boolean = false, hasVersion: boolean = false, hasDescription: boolean = false;
 						for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
 							if(allLines[j].includes("@param")) hasParam = true;
 							if(allLines[j].includes("@return")) hasReturn = true;
@@ -402,9 +401,6 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 	word = word.replaceAll('\t', spaceString);
 	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
-	preprocessBlockComments(allLines);
-	preprocessQuotedStrings(allLines);
-	allLines = addJavaDoc(allLines, indentPref);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
 		if(includeExcludingCommentString(currentLine, i, "public") || includeExcludingCommentString(currentLine, i, "private")
@@ -455,6 +451,10 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 			allLines[i] = allLines[i].replace("++" + usedVariable, usedVariable + "++");
 		}
 	}
+	allLines = allLines.join('\n').split('\n');
+	preprocessBlockComments(allLines);
+	preprocessQuotedStrings(allLines);
+	allLines = addJavaDoc(allLines, indentPref);
 	let newWord = allLines.join('\n');
 	return newWord;
 }
