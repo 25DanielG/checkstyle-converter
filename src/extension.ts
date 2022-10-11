@@ -320,16 +320,16 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 					if(allLines[j].includes("@version")) hasVersion = true;
 				}
 				if(!hasAuthor) {
-					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @author");
+					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @author");
 				}
 				if(!hasDescription) {
-					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @description");
+					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @description");
 				}
 				if(!hasVersion) {
-					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @version");
+					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @version");
 				}
 			} else {
-				allLines[i] = tmpStr + "/*\n" + tmpStr + " * @description \n" + tmpStr + " * @author \n" + tmpStr + " * @version\n" + tmpStr + " */\n" + allLines[i];
+				allLines[i] = tmpStr + "/**\n" + tmpStr + " * @description \n" + tmpStr + " * @author \n" + tmpStr + " * @version\n" + tmpStr + " */\n" + allLines[i];
 			}
 		} else if((includeExcludingCommentString(allLines[i], i, "public") || includeExcludingCommentString(allLines[i], i, "private") || includeExcludingCommentString(allLines[i], i, "protected")) 
 		&& !includeExcludingCommentString(allLines[i], i, "final") && !includeExcludingCommentString(allLines[i], i, ";") && (includeExcludingCommentString(allLines[i], i, "(") || includeExcludingCommentString(allLines[i + 1], i + 1, "("))) {
@@ -354,19 +354,19 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 							if(allLines[j].includes("@postcondition")) hasPost = true;
 						}
 						if(!hasParam) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @param");
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @param");
 						}
 						if(!hasReturn) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @return");
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @return");
 						}
 						if(!hasPre) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @precondition");
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @precondition");
 						}
 						if(!hasPost) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/*\n" + tmpStr + " * @postcondition");
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @postcondition");
 						}
 					} else {
-						allLines[i] = tmpStr + "/*\n" + tmpStr + " * @param \n" + tmpStr + " * @precondition \n" + tmpStr + " * @postcondition\n" + tmpStr + " * @return \n" + tmpStr + " */\n" + allLines[i];
+						allLines[i] = tmpStr + "/**\n" + tmpStr + " * @param \n" + tmpStr + " * @precondition \n" + tmpStr + " * @postcondition\n" + tmpStr + " * @return \n" + tmpStr + " */\n" + allLines[i];
 					}
 				}
 			}
