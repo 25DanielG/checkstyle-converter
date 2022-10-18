@@ -34,7 +34,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText();
+				outlineProperIndent(word.split("\n"), indentPreference);
 				let newWord: string = performCheckstyle(range, word, changePP, indentPreference);
+				//let newWord: string="";
 				editBuilder.replace(range, newWord);
 			});
 		} else {
@@ -443,6 +445,7 @@ function outlineProperIndent(allLines: string[], indentPref: number) {
 	preprocessQuotedStrings(allLines);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
+		console.log((i + 1) + ": " + indentPushNum);
 		indentTrackerArr.push(indentPushNum);
 		if(includeExcludingCommentString(currentLine, i, "class ") || (includeExcludingCommentString(currentLine, i, "final ") && !includeExcludingCommentString(currentLine, i, ";"))) {
 			++indentPushNum;
@@ -450,7 +453,7 @@ function outlineProperIndent(allLines: string[], indentPref: number) {
 			if(!includeExcludingCommentString(currentLine, i, ";") && !includeExcludingCommentString(currentLine, i, "=")) {
 				++indentPushNum;
 			}
-		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && !includeExcludingCommentString(currentLine, i, ";")) {
+		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && (includeExcludingCommentString(currentLine, i, "{") || includeExcludingCommentString(allLines[i + 1], i + 1, "{"))) {
 			++indentPushNum;
 		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
 			++indentPushNum;
@@ -512,7 +515,7 @@ export function performIndentation(range: vscode.Range, word: string, indentPref
 					normalNextIndent = tmp;
 				}
 			}
-		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && !includeExcludingCommentString(currentLine, i, ";")) {
+		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && (includeExcludingCommentString(currentLine, i, "{") || includeExcludingCommentString(allLines[i + 1], i + 1, "{"))) {
 			++indentPushNum;
 			let tmp = normalIndentWithBrace(allLines[i + 1]);
 			if(tmp !== undefined) {
