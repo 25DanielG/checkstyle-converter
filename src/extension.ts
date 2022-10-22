@@ -1,7 +1,10 @@
 import { start } from 'repl';
+import { getSystemErrorMap } from 'util';
 import * as vscode from 'vscode';
 var startBlockComments: number[] = [];
 var endBlockComments: number[] = [];
+//var startParens: number[] = [];
+//var endParents: number[] = [];
 var startStrings: number[] = [];
 const editor = vscode.window.activeTextEditor;
 let preDoc = editor?.document.getText();
@@ -17,6 +20,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 			if(preDoc !== undefined) {
 				let preDoc = preprocess();
+
 				if(preDoc !== undefined) {
 					editBuilder.replace(range, preDoc);
 					console.log("Preprocessed editor.");
@@ -34,9 +38,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
 				const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 				let word = editor.document.getText();
-				outlineProperIndent(word.split("\n"), indentPreference);
 				let newWord: string = performCheckstyle(range, word, changePP, indentPreference);
-				//let newWord: string="";
 				editBuilder.replace(range, newWord);
 			});
 		} else {
@@ -183,6 +185,7 @@ function preprocess() {
 	newWord = newWord.replace("@Version", "@version");
 	newWord = newWord.replace("@ description", "@description");
 	newWord = newWord.replace("@Description", "@description");
+	newWord = preprocessString(newWord);
 	return newWord;
 }
 function countSpacesBeforeCode(strLine: string) {
@@ -237,11 +240,21 @@ function onlyOpenBrace(strLine: string) {
 	}
 }
 function preprocessString(fullDoc: string) {
+	let regexOne = /for \(/g, regexTwo = /while \(/g, regexThree = /else if \(/g;
+	let regexFour = /if \(/g, regexFive = /else \(/g, regexSix = /try {/
+	let regexSeven = /catch \(/;
 	fullDoc = fullDoc.replaceAll("for (", "for(");
 	fullDoc = fullDoc.replaceAll("while (", "while(");
 	fullDoc = fullDoc.replaceAll("else if (", "else if(");
 	fullDoc = fullDoc.replaceAll("if (", "if(");
 	fullDoc = fullDoc.replaceAll("else (", "else(");
+	fullDoc = fullDoc.replaceAll("catch (", "catch(");
+	fullDoc = fullDoc.replaceAll("try {", "try{");
+	var continuePreprocess: boolean = fullDoc.search(regexOne) >= 0 || fullDoc.search(regexTwo) >= 0 || 
+		fullDoc.search(regexThree) >= 0 || fullDoc.search(regexFour) >= 0 || 
+		fullDoc.search(regexFive) >= 0 || fullDoc.search(regexSix) >= 0 || 
+		fullDoc.search(regexSeven) >= 0;
+	if(continuePreprocess) fullDoc = preprocessString(fullDoc);
 	return fullDoc;
 }
 function includeExcludingCommentString(str: string, cnt: number, toFind: string) {
@@ -315,20 +328,24 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 			}
 			if(i !== 0 && includeExcludingCommentString(allLines[i - 1], i - 1, "*/")) {
 				let tmpIndex = endBlockComments.indexOf(i - 1);
-				let hasAuthor: boolean = false, hasVersion: boolean = false, hasDescription: boolean = false;
+				let hasAuthor: boolean = false, hasVersion: boolean = false;
 				for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
 					if(allLines[j].includes("@author")) hasAuthor = true;
-					if(allLines[j].includes("@description")) hasDescription = true;
 					if(allLines[j].includes("@version")) hasVersion = true;
 				}
 				if(!hasAuthor) {
-					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @author");
-				}
-				if(!hasDescription) {
-					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @description");
+					if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+						allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @author");	
+					} else {
+						allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @author");
+					}
 				}
 				if(!hasVersion) {
-					allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @version");
+					if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+						allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @version");	
+					} else {
+						allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @version");
+					}
 				}
 			} else {
 				allLines[i] = tmpStr + "/**\n" + tmpStr + " * @description \n" + tmpStr + " * @author \n" + tmpStr + " * @version\n" + tmpStr + " */\n" + allLines[i];
@@ -356,16 +373,32 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 							if(allLines[j].includes("@postcondition")) hasPost = true;
 						}
 						if(!hasParam) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @param");
+							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @param");	
+							} else {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @param");
+							}
 						}
 						if(!hasReturn) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @return");
+							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @return");	
+							} else {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @return");
+							}
 						}
 						if(!hasPre) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @precondition");
+							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @precondition");	
+							} else {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @precondition");
+							}
 						}
 						if(!hasPost) {
-							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @postcondition");
+							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @postcondition");	
+							} else {
+								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @postcondition");
+							}
 						}
 					} else {
 						allLines[i] = tmpStr + "/**\n" + tmpStr + " * @param \n" + tmpStr + " * @precondition \n" + tmpStr + " * @postcondition\n" + tmpStr + " * @return \n" + tmpStr + " */\n" + allLines[i];
@@ -379,7 +412,6 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 export function performCheckstyle(range: vscode.Range, word: string, flagPP: boolean, indentPref: number) {
 	let spaceString: string = makeSpaceString(indentPref);
 	word = word.replaceAll('\t', spaceString);
-	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
@@ -439,6 +471,7 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 	return newWord;
 }
 function outlineProperIndent(allLines: string[], indentPref: number) {
+	console.log("Enetered outlineProperIndent");
 	let indentPushNum: number = 0;
 	let indentTrackerArr = new Array<number>();
 	preprocessBlockComments(allLines);
@@ -453,9 +486,9 @@ function outlineProperIndent(allLines: string[], indentPref: number) {
 			if(!includeExcludingCommentString(currentLine, i, ";") && !includeExcludingCommentString(currentLine, i, "=")) {
 				++indentPushNum;
 			}
-		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && (includeExcludingCommentString(currentLine, i, "{") || includeExcludingCommentString(allLines[i + 1], i + 1, "{"))) {
+		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "catch(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else")) && (includeExcludingCommentString(currentLine, i, "{") || includeExcludingCommentString(allLines[i + 1], i + 1, "{"))) {
 			++indentPushNum;
-		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
+		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "try") || includeExcludingCommentString(currentLine, i, "try{") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
 			++indentPushNum;
 		}
 		if(includeExcludingCommentString(currentLine, i, "}") && !includeExcludingCommentString(currentLine, i, "{")) {
@@ -465,7 +498,6 @@ function outlineProperIndent(allLines: string[], indentPref: number) {
 	return indentTrackerArr;
 }
 export function performIndentation(range: vscode.Range, word: string, indentPref: number) {
-	word = preprocessString(word);
 	let allLines: string[] = word.split('\n');
 	preprocessBlockComments(allLines);
 	preprocessQuotedStrings(allLines);
@@ -515,13 +547,13 @@ export function performIndentation(range: vscode.Range, word: string, indentPref
 					normalNextIndent = tmp;
 				}
 			}
-		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else ")) && (includeExcludingCommentString(currentLine, i, "{") || includeExcludingCommentString(allLines[i + 1], i + 1, "{"))) {
+		} else if((includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "catch(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "else")) && (includeExcludingCommentString(currentLine, i, "{") || includeExcludingCommentString(allLines[i + 1], i + 1, "{"))) {
 			++indentPushNum;
 			let tmp = normalIndentWithBrace(allLines[i + 1]);
 			if(tmp !== undefined) {
 				normalNextIndent = tmp;
 			}
-		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
+		} else if(includeExcludingCommentString(currentLine, i, "do ") || includeExcludingCommentString(currentLine, i, "try") || includeExcludingCommentString(currentLine, i, "try{") || includeExcludingCommentString(currentLine, i, "do{") || includeExcludingCommentString(currentLine, i, "else{")) {
 			++indentPushNum;
 			let tmp = normalIndentWithBrace(allLines[i + 1]);
 			if(tmp !== undefined) {
