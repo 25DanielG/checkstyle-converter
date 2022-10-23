@@ -13,6 +13,8 @@ export var indentPreference = 2;
 export var changePP: boolean = false;
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('Checkstlye converter is currently active!');
+	indentPreference = context.globalState.get("indentPreference", 2);
+	context.globalState.setKeysForSync(["indentPreference"]);
 	if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 		editor.edit(editBuilder => {
 			const firstLine = editor.document.lineAt(0);
@@ -20,7 +22,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			const range = new vscode.Range(firstLine.lineNumber, firstLine.range.start.character, lastLine.lineNumber, lastLine.range.end.character);
 			if(preDoc !== undefined) {
 				let preDoc = preprocess();
-
 				if(preDoc !== undefined) {
 					editBuilder.replace(range, preDoc);
 					console.log("Preprocessed editor.");
@@ -135,10 +136,20 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(disposableSix);
+	const newIndentPref = context.globalState.get("indentPreference");
+	if (indentPreference !== newIndentPref) {
+    	context.globalState.update("indentPreference", indentPreference);
+	}
+
 }
 
 // this method is called when your extension is deactivated
-export function deactivate() { }
+export function deactivate(context: vscode.ExtensionContext) {
+	const newIndentPref = context.globalState.get("indentPreference");
+	if (indentPreference !== newIndentPref) {
+    	context.globalState.update("indentPreference", indentPreference);
+	}
+}
 
 function preprocessBlockComments(allLines: string[]) {
 	let toSearchOne: string = "/*";
@@ -168,7 +179,6 @@ function preprocessQuotedStrings(allLines: string[]) {
 }
 function preprocess() {
 	if(preDoc === undefined) return;
-
 	let allLines = preDoc.split('\n');
 	for(let i = 0; i < allLines.length; ++i) {
 		if(allLines[i].trim().length === 0) {
@@ -187,6 +197,25 @@ function preprocess() {
 	newWord = newWord.replace("@Description", "@description");
 	newWord = preprocessString(newWord);
 	return newWord;
+}
+function fixJavaAnnotations(allLines: string[]) {
+	for(let i = 0; i < allLines.length; ++i) {
+		if(includeExcludingCommentString(allLines[i], i, "@")) {
+			allLines[i - 1] += (allLines[i]);
+			allLines.splice(i, 1);
+			preprocessBlockComments(allLines);
+			preprocessQuotedStrings(allLines);
+		}
+	}
+	return allLines;
+}
+function undoJavaAnnotations(allLines: string[]) {
+	for(let i = 0; i < allLines.length; ++i) {
+		if(includeExcludingCommentString(allLines[i], i, "@") && allLines[i].indexOf("@") > allLines[i].indexOf("*/")) {
+			allLines[i].replace("*/", "*/\n");
+		}
+	}
+	return allLines;
 }
 function countSpacesBeforeCode(strLine: string) {
 	let cnt = 0;
@@ -250,9 +279,9 @@ function preprocessString(fullDoc: string) {
 	fullDoc = fullDoc.replaceAll("else (", "else(");
 	fullDoc = fullDoc.replaceAll("catch (", "catch(");
 	fullDoc = fullDoc.replaceAll("try {", "try{");
-	var continuePreprocess: boolean = fullDoc.search(regexOne) >= 0 || fullDoc.search(regexTwo) >= 0 || 
-		fullDoc.search(regexThree) >= 0 || fullDoc.search(regexFour) >= 0 || 
-		fullDoc.search(regexFive) >= 0 || fullDoc.search(regexSix) >= 0 || 
+	var continuePreprocess: boolean = fullDoc.search(regexOne) >= 0 || fullDoc.search(regexTwo) >= 0 ||
+		fullDoc.search(regexThree) >= 0 || fullDoc.search(regexFour) >= 0 ||
+		fullDoc.search(regexFive) >= 0 || fullDoc.search(regexSix) >= 0 ||
 		fullDoc.search(regexSeven) >= 0;
 	if(continuePreprocess) fullDoc = preprocessString(fullDoc);
 	return fullDoc;
@@ -466,19 +495,22 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 	allLines = allLines.join('\n').split('\n');
 	preprocessBlockComments(allLines);
 	preprocessQuotedStrings(allLines);
+	allLines = fixJavaAnnotations(allLines);
 	allLines = addJavaDoc(allLines, indentPref);
+	allLines = undoJavaAnnotations(allLines);
+	preprocessBlockComments(allLines);
+	preprocessQuotedStrings(allLines);
 	let newWord = allLines.join('\n');
 	return newWord;
 }
 function outlineProperIndent(allLines: string[], indentPref: number) {
-	console.log("Enetered outlineProperIndent");
 	let indentPushNum: number = 0;
 	let indentTrackerArr = new Array<number>();
 	preprocessBlockComments(allLines);
 	preprocessQuotedStrings(allLines);
 	for(let i = 0; i < allLines.length; ++i) {
 		let currentLine: string = allLines[i];
-		console.log((i + 1) + ": " + indentPushNum);
+		//console.log((i + 1) + ": " + indentPushNum);
 		indentTrackerArr.push(indentPushNum);
 		if(includeExcludingCommentString(currentLine, i, "class ") || (includeExcludingCommentString(currentLine, i, "final ") && !includeExcludingCommentString(currentLine, i, ";"))) {
 			++indentPushNum;
