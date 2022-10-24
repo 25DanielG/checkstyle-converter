@@ -67,6 +67,23 @@
 				"title": "Fix Indentation Selection",
 				"category": "Checkstyle Converter"
 			}
+		],
+		"configuration": [
+			{
+				"title": "Checkstyle Converter",
+				"properties": {
+					"checkstyle-converter.changeIncrements": {
+						"type": "boolean",
+						"default": false,
+						"description": "Change increments such as ++i to i++."
+					},
+					"checkstyle-converter.indentPreference": {
+						"type": "integer",
+						"default": 2,
+						"description": "Indent preference dictating how to fix indentation and convert checkstyle"
+					}
+				}
+			}
 		]
 	},
 	"scripts": {

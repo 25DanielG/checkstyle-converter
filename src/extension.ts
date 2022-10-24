@@ -17,14 +17,28 @@ export async function activate(context: vscode.ExtensionContext) {
 	//indentPreference = context.globalState.get("indentPreference", 2);
 	//context.globalState.setKeysForSync(["indentPreference"]);
     let section = vscode.workspace.getConfiguration("editor");
+	let customConfig = vscode.workspace.getConfiguration("checkstyle-converter");
     let tabSize = section.get("tabSize", null);
-    if(tabSize === null) {
-        console.log("Unable to retrieve workspace tabSize");
+	let tabPref = customConfig.get("indentPreference", null);
+    if(tabPref === null) {
+		if(tabSize !== null) {
+			indentPreference = tabSize;
+			console.log("Found workspace default. Set indent preference to: " + tabSize);
+		} else {
+			console.log("Unable to retrieve workspace tabSize");
+		}
     } else {
-        indentPreference = tabSize;
-        console.log("Set indent preference to: " + tabSize);
+        indentPreference = tabPref;
+        console.log("Found custom setting. Set indent preference to: " + tabPref);
     }
     let insertSpaces = section.get("insertSpaces", true);
+	let togIncrement = customConfig.get("changeIncrements", null);
+	if(togIncrement === null) {
+		console.log("Unable to retrieve workspace togIncrement");
+	} else {
+		changePP = togIncrement;
+		console.log("Found custom setting. Set toggle increment to: " + togIncrement);
+	}
 	if(editor && (editor.document.fileName.includes(".java") || editor.document.fileName.includes(".jt"))) {
 		editor.edit(editBuilder => {
 			const firstLine = editor.document.lineAt(0);
@@ -75,8 +89,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(disposableTwo);
-	let disposableThree = vscode.commands.registerCommand('checkstyle-converter.togglePlusPlus', () => {
+	let disposableThree = vscode.commands.registerCommand('checkstyle-converter.togglePlusPlus', async () => {
 		changePP = !changePP;
+		try {
+			//vscode.workspace.getConfiguration("editor.tabSize");
+			await customConfig.update("changeIncrements", changePP);
+			console.log("Custom global update (increments) succeeded");
+		} catch (errorMsg) {
+			console.log(`Custom global update (increments) failed: ${errorMsg}`);
+		}
 		vscode.window.showInformationMessage("Automatically change ++i to i++ toggled: " + changePP);
 	});
 	context.subscriptions.push(disposableThree);
@@ -90,7 +111,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			quickPick.onDidChangeValue(() => {
 				if (!choices.includes(quickPick.value)) quickPick.items = [quickPick.value, ...choices].map(label => ({ label }));
 			});
-			quickPick.onDidAccept(() => {
+			quickPick.onDidAccept(async () => {
 				const selection = quickPick.activeItems[0];
 				tmp = selection.label;
 				resolve(selection.label);
@@ -102,13 +123,18 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 				//let allAsJSON = JSON.parse(JSON.stringify(all));
 				//const editorSettings = allAsJSON.editor;
-                let section = vscode.workspace.getConfiguration("editor");
-                section.update("tabSize", indentPreference);
-                if(section.get("tabSize", null) !== indentPreference) {
-                    console.log("Unable to updated vscode workspace tabSize");
-                } else {
-                    console.log("Updated vscode workspace tabSize");
-                }
+				try {
+					await customConfig.update("indentPreference", indentPreference);
+					console.log("Custom global update (tabPreference) succeeded");
+				} catch (errorMsg) {
+					console.log(`Custom global update (tabPreference) failed: ${errorMsg}`);
+				}
+				try {
+					await section.update("tabSize", indentPreference);
+					console.log("Vscode workspace global update (tabPreference) succeeded");
+				} catch (errorMsg) {
+					console.log(`Vscode workspace global update (tabPreference) failed: ${errorMsg}`);
+				}
 				vscode.window.showInformationMessage("Changed your indent preference to: " + indentPreference);
 				quickPick.hide();
 			});
@@ -150,23 +176,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(disposableSix);
-	const newIndentPref = context.globalState.get("indentPreference");
-	if (indentPreference !== newIndentPref) {
-    	context.globalState.update("indentPreference", indentPreference);
-	}
-
 }
 
 // this method is called when your extension is deactivated
-export async function deactivate(context: vscode.ExtensionContext) {
-	/*try {
-        //vscode.workspace.getConfiguration("editor.tabSize");
-		await context.globalState.update("indentPreference", indentPreference);
-		console.log("update succeeded");
-	} catch (errorMsg) {
-		console.log(`update failed: ${errorMsg}`);
-	}*/
-}
+export async function deactivate() { }
 
 function preprocessBlockComments(allLines: string[]) {
 	let toSearchOne: string = "/*";
