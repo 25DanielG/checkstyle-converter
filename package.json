@@ -26,7 +26,7 @@
 		"automatic"
 	],
 	"activationEvents": [
-		"onView:checkstyle-sidebar",
+		"onLanguage:java",
 		"onCommand:checkstyle-converter.convertCheckstyle",
 		"onCommand:checkstyle-converter.convertCheckstyleWithSelction",
 		"onCommand:checkstyle-converter.togglePlusPlus",
