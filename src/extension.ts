@@ -230,9 +230,10 @@ function preprocess() {
 }
 function fixJavaAnnotations(allLines: string[]) {
 	for(let i = 0; i < allLines.length; ++i) {
-		if(includeExcludingCommentString(allLines[i], i, "@")) {
-			allLines[i - 1] += (allLines[i]);
+		if(includeExcludingCommentString(allLines[i], i, "@") && onlySpecified(allLines[i], "@")) {
+			allLines[i - 1] += allLines[i];
 			allLines.splice(i, 1);
+			--i;
 			preprocessBlockComments(allLines);
 			preprocessQuotedStrings(allLines);
 		}
@@ -241,8 +242,13 @@ function fixJavaAnnotations(allLines: string[]) {
 }
 function undoJavaAnnotations(allLines: string[]) {
 	for(let i = 0; i < allLines.length; ++i) {
-		if(includeExcludingCommentString(allLines[i], i, "@") && allLines[i].indexOf("@") > allLines[i].indexOf("*/")) {
-			allLines[i].replace("*/", "*/\n");
+		if(includeExcludingCommentString(allLines[i], i, "@")) {
+			let spaceNum = countSpacesBeforeCode(allLines[i]);
+			spaceNum = (spaceNum % 2 === 0) ? spaceNum : spaceNum - 1;
+			let spaceStr = makeSpaceString(spaceNum);
+			let index = allLines[i].lastIndexOf("@");
+			//allLines[i] = allLines[i].replace("@", "\n" + spaceStr + "@");
+			allLines[i] = setCharAt(allLines[i], index, "\n" + spaceStr + "@");
 		}
 	}
 	return allLines;
@@ -254,9 +260,10 @@ function countSpacesBeforeCode(strLine: string) {
 		if(character === ' ') {
 			++cnt;
 		} else {
-			return cnt;
+			break;
 		}
 	}
+	return cnt;
 }
 function setSpacesBeforeCode(strLine: string, numSpaces: number, beforeSpaces: number) {
 	let tmpString: string = "";
@@ -270,6 +277,15 @@ function setSpacesBeforeCode(strLine: string, numSpaces: number, beforeSpaces: n
 	}
 	strLine = tmpString + strLine;
 	return strLine;
+}
+function onlySpecified(strLine: string, chr: string) {
+	for(let i = 0; i < strLine.length; ++i) {
+		if(strLine[i] !== ' ' && strLine[i] !== chr) {
+			return false;
+		} else if(strLine[i] === chr) {
+			return true;
+		}
+	}
 }
 function normalIndentWithBrace(strLine: string) {
 	for(let i = 0; i < strLine.length; ++i) {
@@ -317,40 +333,62 @@ function preprocessString(fullDoc: string) {
 	return fullDoc;
 }
 function includeExcludingCommentString(str: string, cnt: number, toFind: string) {
+	let breakFlag: boolean = false;
 	if(str.includes(toFind)) {
-		let indexOf = str.indexOf(toFind);
-		if(str.includes("//")) {
-			let indexOfSlash: number = str.indexOf("//");
-			if(indexOf > indexOfSlash) return false;
-		}
-		for(let i = 0; i < startBlockComments.length; ++i) {
-			if(cnt > startBlockComments[i] && cnt < endBlockComments[i]) {
-				return false;
-			} else if(cnt === startBlockComments[i] && cnt === endBlockComments[i]) {
-				if(indexOf > str.indexOf("/*") && indexOf < str.indexOf("*/")) return false;
-			} else if(cnt === startBlockComments[i]) {
-				if(indexOf > str.indexOf("/*")) return false;
-			} else if(cnt === endBlockComments[i]) {
-				if(indexOf < str.indexOf("/*")) return false;
-			}
-		}
-		if(startStrings.includes(cnt)) {
-			for(let i = 0; i < startStrings.length; ++i) {
-				const indexes = [];
-				for (let j = 0; j < str.length; ++j) {
-					if (str[j] === '"') {
-						indexes.push(j);
-					}
-				}
-				for(let j = 0; j < indexes.length; j += 2) {
-					if(indexOf > indexes[i] && indexOf < indexes[i + 1]) {
-						return false;
-					}
+		var indicies: number[] = getIndicesOf(toFind, str);
+		for(let ind = 0; ind < indicies.length; ++ind) {
+			let indexOf = indicies[ind];
+			if(str.includes("//")) {
+				let indexOfSlash: number = str.indexOf("//");
+				if(indexOf > indexOfSlash) {
+					continue;
 				}
 			}
+			for(let i = 0; i < startBlockComments.length; ++i) {
+				if(cnt > startBlockComments[i] && cnt < endBlockComments[i]) {
+					breakFlag = true;
+					break;
+				} else if(cnt === startBlockComments[i] && cnt === endBlockComments[i]) {
+					if(indexOf > str.indexOf("/*") && indexOf < str.indexOf("*/")) {
+						breakFlag = true;
+						break;
+					}
+				} else if(cnt === startBlockComments[i]) {
+					if(indexOf > str.indexOf("/*")) {
+						breakFlag = true;
+						break;
+					}
+				} else if(cnt === endBlockComments[i]) {
+					if(indexOf < str.indexOf("*/")) {
+						breakFlag = true;
+						break;
+					}
+				}
+			}
+			if(breakFlag) {
+				breakFlag = false;
+				continue;
+			}
+			if(startStrings.includes(cnt)) {
+				for(let i = 0; i < startStrings.length; ++i) {
+					const indexes = getIndicesOf('"', str);
+					for(let j = 0; j < indexes.length; j += 2) {
+						if(indexOf > indexes[i] && indexOf < indexes[i + 1]) {
+							breakFlag = true;
+							break;
+						}
+					}
+					if(breakFlag) break;
+				}
+			}
+			if(breakFlag) {
+				breakFlag = false;
+				continue;
+			}
+			return true;
 		}
-		return true;
 	}
+	return false;
 }
 function findWhereToClose(allLines: string[], currLine: number) {
 	let returnNum: number = -1;
@@ -416,52 +454,50 @@ function addJavaDoc(allLines: string[], indentPref: number) {
 				continue;
 			}
 			let tmpIndent = countSpacesBeforeCode(allLines[i]);
-			if(tmpIndent !== undefined) {
-				if(tmpIndent = classIndentation + indentPref) {
-					let tmpStr = "";
-					let hasParam: boolean = false, hasReturn: boolean = false, hasPre: boolean = false, hasPost: boolean = false;
-					for(let j = 0; j < indentArr[i] * indentPref; ++j) {
-						tmpStr += " ";
+			if(tmpIndent = classIndentation + indentPref) {
+				let tmpStr = "";
+				let hasParam: boolean = false, hasReturn: boolean = false, hasPre: boolean = false, hasPost: boolean = false;
+				for(let j = 0; j < indentArr[i] * indentPref; ++j) {
+					tmpStr += " ";
+				}
+				if(includeExcludingCommentString(allLines[i - 1], i - 1, "*/")) {
+					let tmpIndex = endBlockComments.indexOf(i - 1);
+					for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
+						if(allLines[j].includes("@param")) hasParam = true;
+						if(allLines[j].includes("@return")) hasReturn = true;
+						if(allLines[j].includes("@precondition")) hasPre = true;
+						if(allLines[j].includes("@postcondition")) hasPost = true;
 					}
-					if(includeExcludingCommentString(allLines[i - 1], i - 1, "*/")) {
-						let tmpIndex = endBlockComments.indexOf(i - 1);
-						for(let j = startBlockComments[tmpIndex]; j <= endBlockComments[tmpIndex] + 1; ++j) {
-							if(allLines[j].includes("@param")) hasParam = true;
-							if(allLines[j].includes("@return")) hasReturn = true;
-							if(allLines[j].includes("@precondition")) hasPre = true;
-							if(allLines[j].includes("@postcondition")) hasPost = true;
+					if(!hasParam) {
+						if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @param");	
+						} else {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @param");
 						}
-						if(!hasParam) {
-							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @param");	
-							} else {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @param");
-							}
-						}
-						if(!hasReturn) {
-							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @return");	
-							} else {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @return");
-							}
-						}
-						if(!hasPre) {
-							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @precondition");	
-							} else {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @precondition");
-							}
-						}
-						if(!hasPost) {
-							if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @postcondition");	
-							} else {
-								allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @postcondition");
-							}
-						}
-					} else {
-						allLines[i] = tmpStr + "/**\n" + tmpStr + " * @param \n" + tmpStr + " * @precondition \n" + tmpStr + " * @postcondition\n" + tmpStr + " * @return \n" + tmpStr + " */\n" + allLines[i];
 					}
+					if(!hasReturn) {
+						if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @return");	
+						} else {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @return");
+						}
+					}
+					if(!hasPre) {
+						if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @precondition");	
+						} else {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @precondition");
+						}
+					}
+					if(!hasPost) {
+						if(allLines[startBlockComments[tmpIndex]].includes("/**")) {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/**", "/**\n" + tmpStr + " * @postcondition");	
+						} else {
+							allLines[startBlockComments[tmpIndex]] = allLines[startBlockComments[tmpIndex]].replace("/*", "/**\n" + tmpStr + " * @postcondition");
+						}
+					}
+				} else {
+					allLines[i] = tmpStr + "/**\n" + tmpStr + " * @param \n" + tmpStr + " * @precondition \n" + tmpStr + " * @postcondition\n" + tmpStr + " * @return \n" + tmpStr + " */\n" + allLines[i];
 				}
 			}
 		}
@@ -476,39 +512,32 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 		let currentLine: string = allLines[i];
 		if(includeExcludingCommentString(currentLine, i, "public") || includeExcludingCommentString(currentLine, i, "private")
 			|| includeExcludingCommentString(currentLine, i, "protected") || includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "else")
-			|| includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "do") || includeExcludingCommentString(currentLine, i, "if(")) {
+			|| includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "do") || includeExcludingCommentString(currentLine, i, "try")
+			|| includeExcludingCommentString(currentLine, i, "if(") || includeExcludingCommentString(currentLine, i, "catch(")) {
 			if(includeExcludingCommentString(currentLine, i, "{")) {
-				if(includeExcludingCommentString(currentLine, i, "}") && !includeExcludingCommentString(currentLine, i, "else")) continue;
+				if(includeExcludingCommentString(currentLine, i, "}") && !includeExcludingCommentString(currentLine, i, "else") && !includeExcludingCommentString(currentLine, i, "catch(")) continue;
 				let spacesBefore = countSpacesBeforeCode(allLines[i]);
-				let tmpStr: string = "";
-				if(spacesBefore !== undefined) {
-					for(let i = 0; i < spacesBefore; ++i) {
-						tmpStr += " ";
-					}
-				}
+				let tmpStr: string = makeSpaceString(spacesBefore);
 				allLines[i] = allLines[i].replace('{', "\n" + tmpStr + "{");
 			}
 			if(includeExcludingCommentString(currentLine, i, "else") && includeExcludingCommentString(currentLine, i, "}")) {
 				if(currentLine.indexOf('}') < currentLine.indexOf("else")) {
 					let spacesBefore = countSpacesBeforeCode(allLines[i]);
-					let tmpStr: string = "";
-					if(spacesBefore !== undefined) {
-						for(let i = 0; i < spacesBefore; ++i) {
-							tmpStr += " ";
-						}
-					}
+					let tmpStr: string = makeSpaceString(spacesBefore);
 					allLines[i] = allLines[i].replace("else", "\n" + tmpStr + "else");
 				}
 			}
-			if(includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "else(") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(")) {
+			if(includeExcludingCommentString(currentLine, i, "catch(") && includeExcludingCommentString(currentLine, i, "}")) {
+				if(currentLine.indexOf('}') < currentLine.indexOf("catch(")) {
+					let spacesBefore = countSpacesBeforeCode(allLines[i]);
+					let tmpStr: string = makeSpaceString(spacesBefore);
+					allLines[i] = allLines[i].replace("catch", "\n" + tmpStr + "catch");
+				}
+			}
+			if(includeExcludingCommentString(currentLine, i, "for(") || includeExcludingCommentString(currentLine, i, "else") || includeExcludingCommentString(currentLine, i, "while(") || includeExcludingCommentString(currentLine, i, "if(")) {
 				if(!includeExcludingCommentString(currentLine, i, "{") && !onlyOpenBrace(allLines[i + 1])) {
 					let spacesBefore = countSpacesBeforeCode(allLines[i]);
-					let tmpStr: string = "";
-					if(spacesBefore !== undefined) {
-						for(let i = 0; i < spacesBefore; ++i) {
-							tmpStr += " ";
-						}
-					}
+					let tmpStr: string = makeSpaceString(spacesBefore);
 					let closePlace: number = findWhereToClose(allLines, i);
 					allLines[i] = allLines[i] + '\n' + tmpStr + '{';
 					allLines.splice(closePlace + 1, 0, tmpStr + '}');
@@ -527,6 +556,9 @@ export function performCheckstyle(range: vscode.Range, word: string, flagPP: boo
 	preprocessQuotedStrings(allLines);
 	allLines = fixJavaAnnotations(allLines);
 	allLines = addJavaDoc(allLines, indentPref);
+	allLines = allLines.join('\n').split('\n');
+	preprocessBlockComments(allLines);
+	preprocessQuotedStrings(allLines);
 	allLines = undoJavaAnnotations(allLines);
 	preprocessBlockComments(allLines);
 	preprocessQuotedStrings(allLines);
@@ -572,25 +604,23 @@ export function performIndentation(range: vscode.Range, word: string, indentPref
 		let indentTracker = countSpacesBeforeCode(currentLine);
 		properIndent = indentPushNum * indentPref;
 		if(i >= range.start.line && i <= range.end.line) {
-			if(indentTracker !== undefined) {
-				if(normalNextIndent) {
-					if(onlyCloseBrace(currentLine)) {
-						allLines[i] = setSpacesBeforeCode(currentLine, (indentPushNum - 1) * indentPref, indentTracker);
-						//retLines.push(allLines[i]);
-					} else {
-						allLines[i] = setSpacesBeforeCode(currentLine, properIndent, indentTracker);
-						//retLines.push(allLines[i]);
-					}
-				} else {
+			if(normalNextIndent) {
+				if(onlyCloseBrace(currentLine)) {
 					allLines[i] = setSpacesBeforeCode(currentLine, (indentPushNum - 1) * indentPref, indentTracker);
 					//retLines.push(allLines[i]);
-					normalNextIndent = true;
+				} else {
+					allLines[i] = setSpacesBeforeCode(currentLine, properIndent, indentTracker);
+					//retLines.push(allLines[i]);
 				}
-				for(let j = 0; j < startBlockComments.length; ++j) {
-					if(i > startBlockComments[j] && i <= endBlockComments[j]) {
-						if(!includeExcludingCommentString(allLines[i], i, "/*")) {
-							allLines[i] = " " + allLines[i];
-						}
+			} else {
+				allLines[i] = setSpacesBeforeCode(currentLine, (indentPushNum - 1) * indentPref, indentTracker);
+				//retLines.push(allLines[i]);
+				normalNextIndent = true;
+			}
+			for(let j = 0; j < startBlockComments.length; ++j) {
+				if(i > startBlockComments[j] && i <= endBlockComments[j]) {
+					if(!includeExcludingCommentString(allLines[i], i, "/*")) {
+						allLines[i] = " " + allLines[i];
 					}
 				}
 			}
@@ -635,4 +665,20 @@ function makeSpaceString(indentPreference: number) {
 		spaceString += " ";
 	}
 	return spaceString;
+}
+function setCharAt(str: string,index: number, chr: string) {
+    if(index > str.length-1) return str;
+    return str.substring(0,index) + chr + str.substring(index+1);
+}
+function getIndicesOf(searchStr: string, str: string) {
+    var searchStrLen = searchStr.length;
+    if (searchStrLen === 0) {
+        return [];
+    }
+    var startIndex = 0, index, indices = [];
+    while ((index = str.indexOf(searchStr, startIndex)) > -1) {
+        indices.push(index);
+        startIndex = index + searchStrLen;
+    }
+    return indices;
 }
